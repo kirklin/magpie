@@ -8,6 +8,11 @@ export default kirklin({
 },
 // --- Custom Rule Overrides ---
 {
+  ignores: [
+    "src-tauri",
+    "src-tauri/**",
+  ],
+}, {
   rules: {
     "node/prefer-global/process": "off", // Allow using `process.env`
   },
