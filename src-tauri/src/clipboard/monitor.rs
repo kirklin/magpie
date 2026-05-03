@@ -34,6 +34,8 @@ pub struct ClipboardChangedPayload {
     pub source_app_name: Option<String>,
     pub is_pinned: bool,
     pub created_at: String,
+    pub accessed_at: String,
+    pub access_count: i64,
 }
 
 /// Start the clipboard monitoring loop
@@ -176,18 +178,18 @@ async fn store_text_entry(
     let instances = db_instances.0.read().await;
 
     if let Some(db) = instances.get("sqlite:magpie.db") {
-        let id = match db {
+        let (id, created_at, access_count) = match db {
             DbPool::Sqlite(pool) => {
                 // Check for duplicate hash first
-                let existing: Option<(i64,)> = sqlx::query_as(
-                    "SELECT id FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                let existing: Option<(i64, String, i64)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
                 )
                 .bind(&hash)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                if let Some((existing_id,)) = existing {
+                let (final_id, final_created_at, final_access_count) = if let Some((existing_id, created_at, access_count)) = existing {
                     // Update accessed_at and access_count
                     sqlx::query(
                         "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
@@ -197,10 +199,11 @@ async fn store_text_entry(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    existing_id
+                    
+                    (existing_id, created_at, access_count + 1)
                 } else {
                     let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, text_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO clipboard_entries (content_type, text_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                     )
                     .bind(content_type)
                     .bind(&text)
@@ -214,8 +217,11 @@ async fn store_text_entry(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    result.last_insert_rowid()
-                }
+                    
+                    (result.last_insert_rowid(), now.clone(), 1)
+                };
+
+                (final_id, final_created_at, final_access_count)
             }
             #[allow(unreachable_patterns)]
             _ => return Err("Unsupported database type".to_string()),
@@ -230,7 +236,9 @@ async fn store_text_entry(
             source_app,
             source_app_name,
             is_pinned: false,
-            created_at: now,
+            created_at,
+            accessed_at: now,
+            access_count,
         }))
     } else {
         Err("Database not initialized".to_string())
@@ -291,18 +299,18 @@ async fn store_image_entry(
     let instances = db_instances.0.read().await;
 
     if let Some(db) = instances.get("sqlite:magpie.db") {
-        let id = match db {
+        let (id, created_at, access_count) = match db {
             DbPool::Sqlite(pool) => {
                 // Check for duplicate hash
-                let existing: Option<(i64,)> = sqlx::query_as(
-                    "SELECT id FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                let existing: Option<(i64, String, i64)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
                 )
                 .bind(&hash)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                if let Some((existing_id,)) = existing {
+                let (final_id, final_created_at, final_access_count) = if let Some((existing_id, created_at, access_count)) = existing {
                     sqlx::query(
                         "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
                     )
@@ -311,10 +319,11 @@ async fn store_image_entry(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    existing_id
+                    
+                    (existing_id, created_at, access_count + 1)
                 } else {
                     let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, image_path, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO clipboard_entries (content_type, image_path, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                     )
                     .bind("image")
                     .bind(&file_path_str)
@@ -328,8 +337,11 @@ async fn store_image_entry(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    result.last_insert_rowid()
-                }
+                    
+                    (result.last_insert_rowid(), now.clone(), 1)
+                };
+
+                (final_id, final_created_at, final_access_count)
             }
             #[allow(unreachable_patterns)]
             _ => return Err("Unsupported database type".to_string()),
@@ -344,7 +356,9 @@ async fn store_image_entry(
             source_app,
             source_app_name,
             is_pinned: false,
-            created_at: now,
+            created_at,
+            accessed_at: now,
+            access_count,
         }))
     } else {
         Err("Database not initialized".to_string())

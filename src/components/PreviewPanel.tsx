@@ -104,7 +104,17 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
           {wordCount > 0 && <InfoRow label="Words" value={wordCount.toLocaleString()} />}
           {lineCount > 1 && <InfoRow label="Lines" value={lineCount.toLocaleString()} />}
           {isImage && entry.content_preview && <InfoRow label="Size" value={entry.content_preview} />}
-          <InfoRow label="Copied" value={formatCopiedTime(entry.created_at)} />
+          {entry.access_count > 1
+            ? (
+                <>
+                  <InfoRow label="Times copied" value={entry.access_count.toLocaleString()} />
+                  <InfoRow label="Last copied" value={formatCopiedTime(entry.accessed_at)} />
+                  <InfoRow label="First copied" value={formatCopiedTime(entry.created_at)} />
+                </>
+              )
+            : (
+                <InfoRow label="Copied" value={formatCopiedTime(entry.created_at)} />
+              )}
           {entry.is_pinned && <InfoRow label="Status" value="📌 Pinned" />}
         </div>
       </div>
