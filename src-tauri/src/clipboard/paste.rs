@@ -2,25 +2,34 @@ use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Get the frontmost application info on macOS
-pub fn get_frontmost_app() -> (Option<String>, Option<String>) {
+pub fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
     #[cfg(target_os = "macos")]
     {
+        use std::sync::mpsc;
         use objc2_app_kit::NSWorkspace;
         use objc2::rc::autoreleasepool;
 
-        autoreleasepool(|_| {
-            let workspace = NSWorkspace::sharedWorkspace();
-            if let Some(app) = workspace.frontmostApplication() {
-                let bundle_id = app
-                    .bundleIdentifier()
-                    .map(|s| s.to_string());
-                let name = app
-                    .localizedName()
-                    .map(|s| s.to_string());
-                return (bundle_id, name);
-            }
-            (None, None)
-        })
+        let (tx, rx) = mpsc::channel();
+        
+        let _ = app_handle.run_on_main_thread(move || {
+            let result = autoreleasepool(|_| {
+                let workspace = NSWorkspace::sharedWorkspace();
+                if let Some(app) = workspace.frontmostApplication() {
+                    let bundle_id = app
+                        .bundleIdentifier()
+                        .map(|s| s.to_string());
+                    let name = app
+                        .localizedName()
+                        .map(|s| s.to_string());
+                    (bundle_id, name)
+                } else {
+                    (None, None)
+                }
+            });
+            let _ = tx.send(result);
+        });
+
+        rx.recv().unwrap_or((None, None))
     }
 
     #[cfg(not(target_os = "macos"))]

@@ -62,6 +62,7 @@ pub fn run() {
             commands::settings::get_default_settings,
             // System commands
             commands::system::get_app_icon,
+            commands::system::hide_window,
         ])
         // --- Setup ---
         .setup(|app| {
@@ -129,7 +130,7 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
             let _ = window.hide();
         } else {
             // Get previous active app before showing Magpie
-            let (_, name) = clipboard::paste::get_frontmost_app();
+            let (_, name) = clipboard::paste::get_frontmost_app(handle);
             if let Some(app_name) = name {
                 let _ = window.emit("active-app-changed", app_name);
             } else {
@@ -149,7 +150,7 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
 /// Show and focus the main window
 pub fn show_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
-        let (_, name) = clipboard::paste::get_frontmost_app();
+        let (_, name) = clipboard::paste::get_frontmost_app(handle);
         if let Some(app_name) = name {
             let _ = window.emit("active-app-changed", app_name);
         } else {

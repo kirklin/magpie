@@ -171,7 +171,7 @@ async fn store_text_entry(
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Get the source app (frontmost app)
-    let (source_app, source_app_name) = get_frontmost_app();
+    let (source_app, source_app_name) = get_frontmost_app(app_handle);
 
     // Insert into database
     let db_instances = app_handle.state::<DbInstances>();
@@ -292,7 +292,7 @@ async fn store_image_entry(
     let byte_size = rgba_bytes.len() as i64;
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-    let (source_app, source_app_name) = get_frontmost_app();
+    let (source_app, source_app_name) = get_frontmost_app(app_handle);
 
     // Insert into database
     let db_instances = app_handle.state::<DbInstances>();
@@ -477,25 +477,33 @@ fn adler32(data: &[u8]) -> u32 {
 }
 
 /// Get the frontmost application info on macOS
-fn get_frontmost_app() -> (Option<String>, Option<String>) {
+fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
     #[cfg(target_os = "macos")]
     {
+        use std::sync::mpsc;
         use objc2_app_kit::NSWorkspace;
         use objc2::rc::autoreleasepool;
 
-        autoreleasepool(|_| {
-            let workspace = NSWorkspace::sharedWorkspace();
-            if let Some(app) = workspace.frontmostApplication() {
-                let bundle_id = app
-                    .bundleIdentifier()
-                    .map(|s| s.to_string());
-                let name = app
-                    .localizedName()
-                    .map(|s| s.to_string());
-                return (bundle_id, name);
-            }
-            (None, None)
-        })
+        let (tx, rx) = mpsc::channel();
+        let _ = app_handle.run_on_main_thread(move || {
+            let result = autoreleasepool(|_| {
+                let workspace = NSWorkspace::sharedWorkspace();
+                if let Some(app) = workspace.frontmostApplication() {
+                    let bundle_id = app
+                        .bundleIdentifier()
+                        .map(|s| s.to_string());
+                    let name = app
+                        .localizedName()
+                        .map(|s| s.to_string());
+                    (bundle_id, name)
+                } else {
+                    (None, None)
+                }
+            });
+            let _ = tx.send(result);
+        });
+        
+        rx.recv().unwrap_or((None, None))
     }
 
     #[cfg(not(target_os = "macos"))]

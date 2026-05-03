@@ -115,3 +115,11 @@ fn base64_encode(input: &[u8]) -> String {
 
     result
 }
+
+/// Hide the main window
+#[tauri::command]
+pub fn hide_window(app_handle: tauri::AppHandle) {
+    if let Some(window) = tauri::Manager::get_webview_window(&app_handle, "main") {
+        let _ = window.hide();
+    }
+}

@@ -1,4 +1,5 @@
 import type { ClipboardEntry } from "../stores/clipboard";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
@@ -81,7 +82,7 @@ export function ClipboardHistory() {
       }
 
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") {
+      if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
         return;
       }
 
@@ -124,6 +125,11 @@ export function ClipboardHistory() {
             e.preventDefault();
             setIsActionPanelOpen(true);
           }
+          break;
+        }
+        case "Escape": {
+          e.preventDefault();
+          invoke("hide_window");
           break;
         }
       }

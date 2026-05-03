@@ -176,7 +176,7 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
     app_handle.hide().map_err(|e| e.to_string())?;
 
     // 3. Wait for macOS to complete the focus switch by actively reading the active app
-    wait_for_frontmost_app_switch("com.magpie.clipboard").await;
+    wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
 
     // 4. Simulate Cmd+V
     paste::paste_to_active_app(&app_handle, &text, false)
@@ -197,16 +197,16 @@ pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<
     app_handle.hide().map_err(|e| e.to_string())?;
     
     // Wait for frontmost app switch
-    wait_for_frontmost_app_switch("com.magpie.clipboard").await;
+    wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
 
     paste::paste_to_active_app(&app_handle, &text, true)
 }
 
 /// Polls until the frontmost application is NOT the specified bundle ID
-async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str) {
+async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str, app_handle: &tauri::AppHandle) {
     let mut retries = 0;
     while retries < 50 { // max 500ms
-        let (bundle_id, _) = paste::get_frontmost_app();
+        let (bundle_id, _) = paste::get_frontmost_app(app_handle);
         if let Some(id) = bundle_id {
             if id != ignore_bundle_id {
                 log::debug!("Active app switched to: {}", id);
