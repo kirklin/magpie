@@ -1,6 +1,34 @@
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+/// Get the frontmost application info on macOS
+pub fn get_frontmost_app() -> (Option<String>, Option<String>) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWorkspace;
+        use objc2::rc::autoreleasepool;
+
+        autoreleasepool(|_| {
+            let workspace = NSWorkspace::sharedWorkspace();
+            if let Some(app) = workspace.frontmostApplication() {
+                let bundle_id = app
+                    .bundleIdentifier()
+                    .map(|s| s.to_string());
+                let name = app
+                    .localizedName()
+                    .map(|s| s.to_string());
+                return (bundle_id, name);
+            }
+            (None, None)
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        (None, None)
+    }
+}
+
 /// Paste content to the active application by writing to clipboard
 /// and simulating Cmd+V keystroke
 pub fn paste_to_active_app(_app_handle: &AppHandle, _text: &str, _plain_text_only: bool) -> Result<(), String> {

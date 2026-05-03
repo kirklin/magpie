@@ -27,6 +27,8 @@ export function ClipboardHistory() {
     activeFilter,
     setActiveFilter,
     addNewEntry,
+    activeApp,
+    setActiveApp,
   } = useClipboardStore();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
@@ -53,10 +55,15 @@ export function ClipboardHistory() {
       addNewEntry(event.payload);
     });
 
+    const unlistenActiveApp = listen<string>("active-app-changed", (event) => {
+      setActiveApp(event.payload);
+    });
+
     return () => {
       unlisten.then(fn => fn());
+      unlistenActiveApp.then(fn => fn());
     };
-  }, [addNewEntry]);
+  }, [addNewEntry, setActiveApp]);
 
   // Paste helper
   const handlePaste = useCallback(async () => {
@@ -140,6 +147,7 @@ export function ClipboardHistory() {
   const actions = useMemo(() => buildClipboardActions({
     hasEntry: !!selectedEntry,
     isPinned: selectedEntry?.is_pinned ?? false,
+    activeApp,
     onPaste: handlePaste,
     onPastePlain: async () => {
       if (selectedEntry?.text_content) {
@@ -177,7 +185,7 @@ export function ClipboardHistory() {
         clearHistory();
       }
     },
-  }), [selectedEntry, selectedId, handlePaste, pasteAsPlainText, copyEntry, togglePin, deleteEntry, renameEntry, clearHistory]);
+  }), [selectedEntry, selectedId, activeApp, handlePaste, pasteAsPlainText, copyEntry, togglePin, deleteEntry, renameEntry, clearHistory]);
 
   return (
     <div className="flex flex-col h-full">
@@ -245,7 +253,7 @@ export function ClipboardHistory() {
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium">
-            Paste to Active App
+            Paste to {activeApp}
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
           </span>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>

@@ -6,7 +6,7 @@ mod tray;
 use std::sync::Arc;
 use clipboard::monitor::ClipboardMonitorState;
 use database::repository::get_migrations;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -128,6 +128,14 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
+            // Get previous active app before showing Magpie
+            let (_, name) = clipboard::paste::get_frontmost_app();
+            if let Some(app_name) = name {
+                let _ = window.emit("active-app-changed", app_name);
+            } else {
+                let _ = window.emit("active-app-changed", "Active App");
+            }
+
             // Bring app to front first
             let _ = handle.show();
             // Then show window
@@ -141,6 +149,13 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
 /// Show and focus the main window
 pub fn show_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
+        let (_, name) = clipboard::paste::get_frontmost_app();
+        if let Some(app_name) = name {
+            let _ = window.emit("active-app-changed", app_name);
+        } else {
+            let _ = window.emit("active-app-changed", "Active App");
+        }
+
         let _ = handle.show();
         let _ = window.center();
         let _ = window.show();

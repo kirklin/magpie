@@ -481,18 +481,21 @@ fn get_frontmost_app() -> (Option<String>, Option<String>) {
     #[cfg(target_os = "macos")]
     {
         use objc2_app_kit::NSWorkspace;
+        use objc2::rc::autoreleasepool;
 
-        let workspace = NSWorkspace::sharedWorkspace();
-        if let Some(app) = workspace.frontmostApplication() {
-            let bundle_id = app
-                .bundleIdentifier()
-                .map(|s| s.to_string());
-            let name = app
-                .localizedName()
-                .map(|s| s.to_string());
-            return (bundle_id, name);
-        }
-        (None, None)
+        autoreleasepool(|_| {
+            let workspace = NSWorkspace::sharedWorkspace();
+            if let Some(app) = workspace.frontmostApplication() {
+                let bundle_id = app
+                    .bundleIdentifier()
+                    .map(|s| s.to_string());
+                let name = app
+                    .localizedName()
+                    .map(|s| s.to_string());
+                return (bundle_id, name);
+            }
+            (None, None)
+        })
     }
 
     #[cfg(not(target_os = "macos"))]

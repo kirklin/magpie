@@ -46,15 +46,7 @@ sha2 = "0.11.0"
 hex = "0.4.3"
 log = "0.4.29"
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", features = [
-  "NSPasteboard",
-  "NSWorkspace",
-  "NSRunningApplication",
-  "NSImage",
-  "NSBitmapImageRep",
-  "NSImageRep",
-  "NSGraphicsContext"
-] }
+objc2-app-kit = { version = "0.3.2", features = ["NSPasteboard", "NSWorkspace", "NSRunningApplication", "NSImage", "NSBitmapImageRep", "NSImageRep", "NSGraphicsContext"] }
 objc2-foundation = { version = "0.3.2", features = [
   "NSString",
   "NSArray",

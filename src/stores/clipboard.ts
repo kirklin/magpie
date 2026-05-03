@@ -35,7 +35,9 @@ interface ClipboardStore {
   searchQuery: string;
   activeFilter: string | null;
   isLoading: boolean;
+  activeApp: string;
 
+  setActiveApp: (app: string) => void;
   setSearchQuery: (query: string) => void;
   setActiveFilter: (filter: string | null) => void;
   setSelectedId: (id: number | null) => void;
@@ -56,6 +58,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   searchQuery: "",
   activeFilter: null,
   isLoading: false,
+  activeApp: "Active App",
+
+  setActiveApp: (app) => set({ activeApp: app }),
 
   setSearchQuery: (query) => {
     set({ searchQuery: query });

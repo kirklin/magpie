@@ -175,8 +175,8 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
     // 2. Hide the entire application (returns focus to previous app)
     app_handle.hide().map_err(|e| e.to_string())?;
 
-    // 3. Wait for macOS to complete the focus switch
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    // 3. Wait for macOS to complete the focus switch by actively reading the active app
+    wait_for_frontmost_app_switch("com.magpie.clipboard").await;
 
     // 4. Simulate Cmd+V
     paste::paste_to_active_app(&app_handle, &text, false)
@@ -195,7 +195,25 @@ pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
 
     app_handle.hide().map_err(|e| e.to_string())?;
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    
+    // Wait for frontmost app switch
+    wait_for_frontmost_app_switch("com.magpie.clipboard").await;
 
     paste::paste_to_active_app(&app_handle, &text, true)
+}
+
+/// Polls until the frontmost application is NOT the specified bundle ID
+async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str) {
+    let mut retries = 0;
+    while retries < 50 { // max 500ms
+        let (bundle_id, _) = paste::get_frontmost_app();
+        if let Some(id) = bundle_id {
+            if id != ignore_bundle_id {
+                log::debug!("Active app switched to: {}", id);
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        retries += 1;
+    }
 }
