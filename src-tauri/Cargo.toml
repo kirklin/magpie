@@ -1,0 +1,70 @@
+[package]
+name = "magpie"
+version = "0.1.0"
+description = "A Tauri App"
+authors = [ "you" ]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "magpie_lib"
+crate-type = [
+  "staticlib",
+  "cdylib",
+  "rlib"
+]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [
+  "macos-private-api",
+  "tray-icon",
+  "protocol-asset"
+] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = [ "derive" ] }
+serde_json = "1"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-global-shortcut = "2.3.1"
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-sql = { version = "2.4.0", features = [ "sqlite" ] }
+tauri-plugin-store = "2.4.3"
+tauri-plugin-fs = "2.5.1"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-positioner = "2.3.1"
+tauri-plugin-single-instance = "2.4.2"
+tokio = { version = "1.52.1", features = [ "full" ] }
+chrono = { version = "0.4.44", features = [ "serde" ] }
+regex = "1.12.3"
+sha2 = "0.11.0"
+hex = "0.4.3"
+log = "0.4.29"
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", features = [
+  "NSPasteboard",
+  "NSWorkspace",
+  "NSRunningApplication",
+  "NSImage",
+  "NSBitmapImageRep",
+  "NSImageRep",
+  "NSGraphicsContext"
+] }
+objc2-foundation = { version = "0.3.2", features = [
+  "NSString",
+  "NSArray",
+  "NSData",
+  "NSURL",
+  "NSObject",
+  "NSDictionary"
+] }
+sqlx = { version = "0.8.6", features = [
+  "runtime-tokio",
+  "sqlite"
+] }
+env_logger = "0.11.10"

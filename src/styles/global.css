@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* ========================================
+   Magpie Design System — Tailwind v4 Theme
+   ======================================== */
+
+@theme {
+  /* — Colors — */
+  --color-bg-primary: oklch(0.2 0.005 260 / 0.92);
+  --color-bg-secondary: oklch(0.25 0.005 260 / 0.95);
+  --color-bg-tertiary: oklch(0.3 0.005 260 / 0.8);
+  --color-bg-hover: oklch(1 0 0 / 0.08);
+  --color-bg-active: oklch(1 0 0 / 0.12);
+  --color-bg-selected: oklch(0.6 0.15 260 / 0.2);
+
+  --color-text-primary: oklch(1 0 0 / 0.92);
+  --color-text-secondary: oklch(1 0 0 / 0.6);
+  --color-text-tertiary: oklch(1 0 0 / 0.4);
+  --color-text-accent: oklch(0.75 0.12 250);
+
+  --color-accent: oklch(0.65 0.18 260);
+  --color-accent-hover: oklch(0.72 0.16 260);
+  --color-accent-muted: oklch(0.65 0.18 260 / 0.15);
+
+  --color-border: oklch(1 0 0 / 0.08);
+  --color-border-focused: oklch(0.65 0.18 260 / 0.5);
+
+  --color-danger: oklch(0.65 0.2 25);
+  --color-success: oklch(0.7 0.17 150);
+  --color-warning: oklch(0.85 0.15 85);
+  --color-pin: oklch(0.85 0.15 85);
+
+  /* — Type badge colors — */
+  --color-type-text: oklch(0.7 0.03 240);
+  --color-type-url: oklch(0.7 0.12 230);
+  --color-type-email: oklch(0.7 0.12 290);
+  --color-type-image: oklch(0.72 0.12 160);
+  --color-type-file: oklch(0.75 0.12 60);
+  --color-type-color: oklch(0.7 0.15 20);
+  --color-type-code: oklch(0.72 0.1 180);
+
+  /* — Font — */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Cascadia Code", monospace;
+
+  /* — Shadows — */
+  --shadow-window: 0 24px 80px oklch(0 0 0 / 0.6), 0 0 1px oklch(1 0 0 / 0.1);
+
+  /* — Animation — */
+  --animate-fade-in: fade-in 200ms ease forwards;
+  --animate-scale-in: scale-in 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  --animate-slide-up: slide-up 200ms ease forwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========================================
+   Global Base
+   ======================================== */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply box-border m-0 p-0;
+  }
+
+  html,
+  body {
+    @apply h-full overflow-hidden antialiased;
+    font-family: var(--font-sans);
+    user-select: none;
+    cursor: default;
+    background: transparent;
+  }
+
+  #root {
+    @apply h-full;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(1 0 0 / 0.25);
+  }
+}
+
+/* ========================================
+   Utility: drag region for Tauri
+   ======================================== */
+
+@utility drag-region {
+  -webkit-app-region: drag;
+}
+
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
