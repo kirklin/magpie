@@ -3,12 +3,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Paste content to the active application by writing to clipboard
 /// and simulating Cmd+V keystroke
-pub fn paste_to_active_app(app_handle: &AppHandle, text: &str, _plain_text_only: bool) -> Result<(), String> {
-    // Write content to system clipboard
-    app_handle
-        .clipboard()
-        .write_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+pub fn paste_to_active_app(_app_handle: &AppHandle, _text: &str, _plain_text_only: bool) -> Result<(), String> {
+    // Content is already written to clipboard by the caller
 
     // Simulate Cmd+V using CGEvent on macOS
     #[cfg(target_os = "macos")]
@@ -34,8 +30,18 @@ fn simulate_paste_keystroke() {
 
     // Use osascript for reliable key simulation
     // This requires Accessibility permissions
-    let _ = Command::new("osascript")
+    let output = Command::new("osascript")
         .arg("-e")
         .arg(r#"tell application "System Events" to keystroke "v" using command down"#)
         .output();
+        
+    if let Ok(out) = output {
+        if !out.status.success() {
+            log::error!("Paste failed: {}", String::from_utf8_lossy(&out.stderr));
+        } else {
+            log::debug!("Paste successful");
+        }
+    } else {
+        log::error!("Failed to execute osascript");
+    }
 }

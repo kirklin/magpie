@@ -1,7 +1,7 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useDeferredValue, useEffect, useMemo } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
@@ -18,12 +18,18 @@ export function ClipboardHistory() {
     setSelectedId,
     fetchEntries,
     pasteEntry,
+    copyEntry,
+    pasteAsPlainText,
     deleteEntry,
     togglePin,
+    renameEntry,
+    clearHistory,
     activeFilter,
     setActiveFilter,
     addNewEntry,
   } = useClipboardStore();
+
+  const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -52,10 +58,21 @@ export function ClipboardHistory() {
     };
   }, [addNewEntry]);
 
+  // Paste helper
+  const handlePaste = useCallback(async () => {
+    if (selectedEntry?.text_content) {
+      pasteEntry(selectedEntry.text_content);
+    }
+  }, [selectedEntry, pasteEntry]);
+
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Don't handle shortcuts when typing in input
+      // Don't handle when action panel is open
+      if (isActionPanelOpen) {
+        return;
+      }
+
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") {
         return;
@@ -78,10 +95,7 @@ export function ClipboardHistory() {
         }
         case "Enter": {
           e.preventDefault();
-          if (selectedEntry?.text_content) {
-            pasteEntry(selectedEntry.text_content);
-            getCurrentWindow().hide();
-          }
+          handlePaste();
           break;
         }
         case "Backspace": {
@@ -101,13 +115,13 @@ export function ClipboardHistory() {
         case "k": {
           if (e.metaKey) {
             e.preventDefault();
-            // TODO: open actions panel
+            setIsActionPanelOpen(true);
           }
           break;
         }
       }
     },
-    [entries, selectedId, selectedEntry, setSelectedId, pasteEntry, deleteEntry, togglePin],
+    [entries, selectedId, selectedEntry, isActionPanelOpen, setSelectedId, handlePaste, deleteEntry, togglePin],
   );
 
   useEffect(() => {
@@ -121,6 +135,49 @@ export function ClipboardHistory() {
       setSelectedId(entries[0].id);
     }
   }, [entries, selectedId, setSelectedId]);
+
+  // Build actions for selected entry
+  const actions = useMemo(() => buildClipboardActions({
+    hasEntry: !!selectedEntry,
+    isPinned: selectedEntry?.is_pinned ?? false,
+    onPaste: handlePaste,
+    onPastePlain: async () => {
+      if (selectedEntry?.text_content) {
+        pasteAsPlainText(selectedEntry.text_content);
+      }
+    },
+    onCopy: () => {
+      if (selectedEntry?.text_content) {
+        copyEntry(selectedEntry.text_content);
+      }
+    },
+    onTogglePin: () => {
+      if (selectedId) {
+        togglePin(selectedId);
+      }
+    },
+    onDelete: () => {
+      if (selectedId) {
+        deleteEntry(selectedId);
+      }
+    },
+    onRename: () => {
+      if (selectedId) {
+        const name = window.prompt("Enter new name:", selectedEntry?.custom_name || "");
+        if (name !== null) {
+          renameEntry(selectedId, name);
+        }
+      }
+    },
+    onSaveSnippet: () => {
+      // TODO: open snippet save dialog
+    },
+    onClearHistory: () => {
+      if (window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
+        clearHistory();
+      }
+    },
+  }), [selectedEntry, selectedId, handlePaste, pasteAsPlainText, copyEntry, togglePin, deleteEntry, renameEntry, clearHistory]);
 
   return (
     <div className="flex flex-col h-full">
@@ -155,10 +212,9 @@ export function ClipboardHistory() {
                           entry={entry}
                           isSelected={entry.id === selectedId}
                           onClick={() => setSelectedId(entry.id)}
-                          onDoubleClick={() => {
+                          onDoubleClick={async () => {
                             if (entry.text_content) {
                               pasteEntry(entry.text_content);
-                              getCurrentWindow().hide();
                             }
                           }}
                         />
@@ -193,15 +249,25 @@ export function ClipboardHistory() {
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
           </span>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>
-          <span className="flex items-center gap-1.5 text-[13px] text-text-secondary">
+          <button
+            className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors"
+            onClick={() => setIsActionPanelOpen(true)}
+          >
             Actions
             <div className="flex items-center gap-0.5">
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">K</kbd>
             </div>
-          </span>
+          </button>
         </div>
       </div>
+
+      {/* Action Panel */}
+      <ActionPanel
+        isOpen={isActionPanelOpen}
+        onClose={() => setIsActionPanelOpen(false)}
+        actions={actions}
+      />
     </div>
   );
 }

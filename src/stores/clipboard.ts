@@ -165,12 +165,13 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   addNewEntry: (entry) => {
     set((state) => {
       // Check if already exists (dedup)
-      const exists = state.entries.find(e => e.id === entry.id);
-      if (exists) {
+      const existingIndex = state.entries.findIndex(e => e.id === entry.id);
+      if (existingIndex !== -1) {
+        // Move to top and update
+        const newEntries = [...state.entries];
+        newEntries.splice(existingIndex, 1);
         return {
-          entries: state.entries.map(e =>
-            e.id === entry.id ? { ...e, ...entry } : e,
-          ),
+          entries: [{ ...state.entries[existingIndex], ...entry }, ...newEntries],
         };
       }
       return { entries: [entry, ...state.entries] };

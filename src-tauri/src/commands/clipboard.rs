@@ -2,6 +2,7 @@ use tauri::AppHandle;
 use tauri_plugin_sql::{DbInstances, DbPool};
 use tauri::Manager;
 use sqlx::Row;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::clipboard::paste;
@@ -164,7 +165,20 @@ pub async fn rename_clipboard_entry(
 }
 
 #[tauri::command]
-pub fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
+    // 1. Write to clipboard
+    app_handle
+        .clipboard()
+        .write_text(&text)
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+
+    // 2. Hide the entire application (returns focus to previous app)
+    app_handle.hide().map_err(|e| e.to_string())?;
+
+    // 3. Wait for macOS to complete the focus switch
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    // 4. Simulate Cmd+V
     paste::paste_to_active_app(&app_handle, &text, false)
 }
 
@@ -174,6 +188,14 @@ pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), S
 }
 
 #[tauri::command]
-pub fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), String> {
+    app_handle
+        .clipboard()
+        .write_text(&text)
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+
+    app_handle.hide().map_err(|e| e.to_string())?;
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
     paste::paste_to_active_app(&app_handle, &text, true)
 }

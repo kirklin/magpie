@@ -1,5 +1,5 @@
 /** Group entries by date */
-export function groupByDate(entries: Array<{ created_at: string }>): Map<string, typeof entries> {
+export function groupByDate(entries: Array<{ accessed_at: string }>): Map<string, typeof entries> {
   const groups = new Map<string, typeof entries>();
   const now = new Date();
   const today = now.toDateString();
@@ -8,7 +8,7 @@ export function groupByDate(entries: Array<{ created_at: string }>): Map<string,
   const yesterdayStr = yesterday.toDateString();
 
   for (const entry of entries) {
-    const date = new Date(`${entry.created_at}Z`);
+    const date = new Date(`${entry.accessed_at}Z`);
     const dateStr = date.toDateString();
 
     let label: string;
