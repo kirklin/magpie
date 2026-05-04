@@ -229,6 +229,8 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
   const isImage = entry.content_type === "image" && entry.image_path;
   const isFile = entry.content_type === "file" && entry.file_paths;
   const isColor = entry.content_type === "color";
+  const isEmail = entry.content_type === "email";
+  const isUrl = entry.content_type === "url";
   const content = entry.text_content || "";
 
   // Parse file paths for file entries
@@ -315,6 +317,62 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                     </div>
                   </div>
                 )
+            : isEmail
+              ? (() => {
+                  const parts = content.split("@");
+                  const username = parts[0];
+                  const domain = parts.slice(1).join("@");
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
+                      <div className="flex items-center justify-center flex-wrap text-[22px] tracking-tight leading-none break-all">
+                        <span className="text-text-primary font-medium">{username}</span>
+                        {domain && (
+                          <>
+                            <span className="text-text-tertiary font-light mx-[2px]">@</span>
+                            <span className="text-text-secondary font-normal">{domain}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
+                        Email Address
+                      </div>
+                    </div>
+                  );
+                })()
+            : isUrl
+              ? (() => {
+                  let protocol = "";
+                  let domain = content;
+                  let path = "";
+                  
+                  try {
+                    const urlStr = content.startsWith('http') ? content : `https://${content}`;
+                    const urlObj = new URL(urlStr);
+                    protocol = urlObj.protocol + "//";
+                    domain = urlObj.hostname;
+                    path = urlObj.pathname + urlObj.search + urlObj.hash;
+                    if (path === "/") path = "";
+                  } catch {
+                    // Fallback if parsing fails
+                  }
+
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
+                      <div className="flex items-center justify-center flex-wrap text-[20px] tracking-tight leading-relaxed max-w-full break-all">
+                        {protocol && (
+                          <span className="text-text-tertiary font-light mr-[1px]">{protocol}</span>
+                        )}
+                        <span className="text-text-primary font-medium">{domain}</span>
+                        {path && (
+                          <span className="text-text-secondary font-normal">{path}</span>
+                        )}
+                      </div>
+                      <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
+                        Web Link
+                      </div>
+                    </div>
+                  );
+                })()
               : (
                   <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
                     {content || "(无文本内容)"}
