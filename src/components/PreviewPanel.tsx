@@ -1,7 +1,9 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import Prism from "prismjs";
 import React, { useEffect, useState } from "react";
 import { getTypeLabel } from "../utils/classifier";
+import "prismjs/themes/prism-tomorrow.css";
 
 type FileCategory = "image" | "video" | "audio" | "pdf" | "text" | "other";
 
@@ -231,6 +233,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
   const isColor = entry.content_type === "color";
   const isEmail = entry.content_type === "email";
   const isUrl = entry.content_type === "url";
+  const isCode = entry.content_type === "code";
   const content = entry.text_content || "";
 
   // Parse file paths for file entries
@@ -317,67 +320,91 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                     </div>
                   </div>
                 )
-            : isEmail
-              ? (() => {
-                  const parts = content.split("@");
-                  const username = parts[0];
-                  const domain = parts.slice(1).join("@");
-                  return (
-                    <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
-                      <div className="flex items-center justify-center flex-wrap text-[22px] tracking-tight leading-none break-all">
-                        <span className="text-text-primary font-medium">{username}</span>
-                        {domain && (
-                          <>
-                            <span className="text-text-tertiary font-light mx-[2px]">@</span>
-                            <span className="text-text-secondary font-normal">{domain}</span>
-                          </>
-                        )}
+              : isEmail
+                ? (() => {
+                    const parts = content.split("@");
+                    const username = parts[0];
+                    const domain = parts.slice(1).join("@");
+                    return (
+                      <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
+                        <div className="flex items-center justify-center flex-wrap text-[22px] tracking-tight leading-none break-all">
+                          <span className="text-text-primary font-medium">{username}</span>
+                          {domain && (
+                            <>
+                              <span className="text-text-tertiary font-light mx-[2px]">@</span>
+                              <span className="text-text-secondary font-normal">{domain}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
+                          Email Address
+                        </div>
                       </div>
-                      <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
-                        Email Address
-                      </div>
-                    </div>
-                  );
-                })()
-            : isUrl
-              ? (() => {
-                  let protocol = "";
-                  let domain = content;
-                  let path = "";
-                  
-                  try {
-                    const urlStr = content.startsWith('http') ? content : `https://${content}`;
-                    const urlObj = new URL(urlStr);
-                    protocol = urlObj.protocol + "//";
-                    domain = urlObj.hostname;
-                    path = urlObj.pathname + urlObj.search + urlObj.hash;
-                    if (path === "/") path = "";
-                  } catch {
-                    // Fallback if parsing fails
-                  }
+                    );
+                  })()
+                : isUrl
+                  ? (() => {
+                      let protocol = "";
+                      let domain = content;
+                      let path = "";
 
-                  return (
-                    <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
-                      <div className="flex items-center justify-center flex-wrap text-[20px] tracking-tight leading-relaxed max-w-full break-all">
-                        {protocol && (
-                          <span className="text-text-tertiary font-light mr-[1px]">{protocol}</span>
-                        )}
-                        <span className="text-text-primary font-medium">{domain}</span>
-                        {path && (
-                          <span className="text-text-secondary font-normal">{path}</span>
-                        )}
-                      </div>
-                      <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
-                        Web Link
-                      </div>
-                    </div>
-                  );
-                })()
-              : (
-                  <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
-                    {content || "(无文本内容)"}
-                  </pre>
-                )}
+                      try {
+                        const urlStr = content.startsWith("http") ? content : `https://${content}`;
+                        const urlObj = new URL(urlStr);
+                        protocol = `${urlObj.protocol}//`;
+                        domain = urlObj.hostname;
+                        path = urlObj.pathname + urlObj.search + urlObj.hash;
+                        if (path === "/") {
+                          path = "";
+                        }
+                      } catch {
+                        // Fallback if parsing fails
+                      }
+
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full px-12 text-center select-text cursor-text">
+                          <div className="flex items-center justify-center flex-wrap text-[20px] tracking-tight leading-relaxed max-w-full break-all">
+                            {protocol && (
+                              <span className="text-text-tertiary font-light mr-[1px]">{protocol}</span>
+                            )}
+                            <span className="text-text-primary font-medium">{domain}</span>
+                            {path && (
+                              <span className="text-text-secondary font-normal">{path}</span>
+                            )}
+                          </div>
+                          <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
+                            Web Link
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : isCode
+                    ? (() => {
+                        let highlightedCode = content;
+                        try {
+                          highlightedCode = Prism.highlight(content, Prism.languages.javascript, "javascript");
+                        } catch {
+                          // Fallback to raw text
+                        }
+                        return (
+                          <div className="h-full w-full relative flex flex-col">
+                            <pre className="flex-1 overflow-auto bg-bg-secondary rounded-lg p-3 border border-border text-[13px] font-mono leading-[1.6] select-text cursor-text !m-0">
+                              <code
+                                className="language-javascript"
+                                dangerouslySetInnerHTML={{ __html: highlightedCode }}
+                              />
+                            </pre>
+                            <div className="absolute top-3 right-3 px-2 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md text-[10px] font-mono text-white/60 uppercase tracking-widest pointer-events-none shadow-sm">
+                              Code
+                            </div>
+                          </div>
+                        );
+                      })()
+                    : (
+                        <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
+                          {content || "(无文本内容)"}
+                        </pre>
+                      )}
       </div>
 
       {/* Information section */}
