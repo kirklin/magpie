@@ -2,7 +2,6 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
-import { SettingRow } from "../components/settings/SettingRow";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
 import { useNavigationStore } from "../stores/navigation";
@@ -78,35 +77,7 @@ export function SettingsView() {
             />
           </SettingGroup>
 
-          <SettingGroup title="存储">
-            <SettingSelect
-              label="历史保留时长"
-              options={[
-                { label: "7 天", value: "7" },
-                { label: "30 天", value: "30" },
-                { label: "3 个月", value: "90" },
-                { label: "1 年", value: "365" },
-                { label: "永久保留", value: "0" },
-              ]}
-              value={settings.history_retention_days.toString()}
-              onChange={val => updateSetting("history_retention_days", Number.parseInt(val))}
-            />
-            <SettingSelect
-              label="最大记录条数"
-              options={[
-                { label: "100 条", value: "100" },
-                { label: "500 条", value: "500" },
-                { label: "1000 条", value: "1000" },
-                { label: "5000 条", value: "5000" },
-              ]}
-              value={settings.max_history_count.toString()}
-              onChange={val => updateSetting("max_history_count", Number.parseInt(val))}
-            />
-          </SettingGroup>
 
-          <SettingGroup title="快捷键">
-            <SettingRow label="唤出剪贴板" value="Option + Space" />
-          </SettingGroup>
         </div>
       </div>
     </div>
