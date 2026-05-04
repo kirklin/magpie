@@ -25,7 +25,8 @@ tauri-build = { version = "2.6.0", features = [] }
 tauri = { version = "2.11.0", features = [
   "macos-private-api",
   "tray-icon",
-  "protocol-asset"
+  "protocol-asset",
+  "image-png"
 ] }
 tauri-plugin-opener = "2.5.4"
 serde = { version = "1", features = [ "derive" ] }

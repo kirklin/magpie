@@ -20,8 +20,11 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         &[&show, &separator1, &settings, &about, &separator2, &quit],
     )?;
 
+    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-iconTemplate.png"))
+        .unwrap_or_else(|_| app.default_window_icon().cloned().unwrap());
+
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().cloned().unwrap())
+        .icon(tray_icon)
         .menu(&menu)
         // Allow default left/right click to show menu, or use click event to toggle
         .on_menu_event(move |app, event| {
