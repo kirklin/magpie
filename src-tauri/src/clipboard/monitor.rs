@@ -37,6 +37,7 @@ pub struct ClipboardChangedPayload {
     pub created_at: String,
     pub accessed_at: String,
     pub access_count: i64,
+    pub byte_size: i64,
 }
 
 /// Start the clipboard monitoring loop
@@ -294,9 +295,10 @@ async fn store_file_entry(
 
                 if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
                     sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
+                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
                     )
                     .bind(&now)
+                    .bind(byte_size)
                     .bind(existing_id)
                     .execute(pool)
                     .await
@@ -341,6 +343,7 @@ async fn store_file_entry(
             created_at,
             accessed_at: now,
             access_count,
+            byte_size,
         }))
     } else {
         Err("Database not initialized".to_string())
@@ -398,9 +401,10 @@ async fn store_text_entry(
                 if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
                     // Update accessed_at and access_count
                     sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
+                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
                     )
                     .bind(&now)
+                    .bind(byte_size)
                     .bind(existing_id)
                     .execute(pool)
                     .await
@@ -444,6 +448,7 @@ async fn store_text_entry(
             created_at,
             accessed_at: now,
             access_count,
+            byte_size,
         }))
     } else {
         Err("Database not initialized".to_string())
@@ -517,9 +522,10 @@ async fn store_image_entry(
 
                 if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
                     sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
+                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
                     )
                     .bind(&now)
+                    .bind(byte_size)
                     .bind(existing_id)
                     .execute(pool)
                     .await
@@ -563,6 +569,7 @@ async fn store_image_entry(
             created_at,
             accessed_at: now,
             access_count,
+            byte_size,
         }))
     } else {
         Err("Database not initialized".to_string())
