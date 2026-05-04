@@ -1,5 +1,13 @@
-# Magpie
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Magpie Banner" />
+</p>
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+<h1 align="center">Magpie</h1>
 
-A fast, modern clipboard manager built with Tauri, React, and Rust.
+<p align="center">
+  A fast, modern clipboard manager built with Tauri, React, and Rust.
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
+</p>

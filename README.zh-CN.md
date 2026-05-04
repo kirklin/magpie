@@ -1,5 +1,13 @@
-# Magpie
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Magpie Banner" />
+</p>
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+<h1 align="center">Magpie</h1>
 
-一个基于 Tauri、React 和 Rust 构建的剪贴板管理器。
+<p align="center">
+  一个基于 Tauri、React 和 Rust 构建的快速、现代的剪贴板管理器。
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
