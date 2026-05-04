@@ -16,6 +16,8 @@ const FILTER_OPTIONS = [
   { value: "file", label: "Files Only" },
   { value: "url", label: "Links Only" },
   { value: "color", label: "Colors Only" },
+  { value: "code", label: "Code Only" },
+  { value: "email", label: "Emails Only" },
 ];
 
 export function SearchBar({ value, onChange, activeFilter, onFilterChange, placeholder = "Type to filter entries…" }: SearchBarProps) {
