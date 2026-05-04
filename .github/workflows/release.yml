@@ -7,7 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+    steps:
+      - id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Magpie ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
   publish-tauri:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -49,9 +66,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: Magpie v__VERSION__
-          releaseDraft: false
-          prerelease: false
-          generateReleaseNotes: true
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
