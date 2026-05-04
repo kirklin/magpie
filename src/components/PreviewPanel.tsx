@@ -112,10 +112,11 @@ function FilePreview({ filePath }: { filePath: string }) {
       );
     case "pdf":
       return (
-        <embed
-          src={src}
-          type="application/pdf"
-          className="w-full h-full rounded-lg"
+        <iframe
+          key={src}
+          src={`${src}?t=${Date.now()}`}
+          className="w-full h-full rounded-lg border-0 bg-white"
+          title="PDF Preview"
         />
       );
     case "text":
