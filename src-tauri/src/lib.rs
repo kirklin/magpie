@@ -20,7 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            tauri_plugin_autostart::MacosLauncher::AppleScript,
             None,
         ))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
