@@ -267,13 +267,7 @@ export function ClipboardHistory() {
       {/* Bottom action bar */}
       <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0">
         <div className="flex items-center gap-2.5 text-text-primary">
-          <div className="w-5 h-5 flex items-center justify-center rounded-md bg-accent text-white shadow-sm">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 7C16 7 19 4 22 4C22 7 19 10 16 10" />
-              <path d="M8 7C8 7 5 4 2 4C2 7 5 10 8 10" />
-              <path d="M12 20C12 20 6 14 6 9C6 6.79 7.79 5 10 5C11.2 5 12 5.5 12 5.5C12 5.5 12.8 5 14 5C16.21 5 18 6.79 18 9C18 14 12 20 12 20Z" />
-            </svg>
-          </div>
+          <img src="/logo.png" alt="Magpie" className="w-5 h-5 object-contain rounded shadow-sm" />
           <span className="text-[13px] font-medium">Clipboard History</span>
         </div>
         <div className="flex items-center gap-3">

@@ -205,13 +205,7 @@ export function buildClipboardActions({
       {
         id: "paste",
         label: `Paste to ${activeApp}`,
-        icon: (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
-            <path d="M16 7C16 7 19 4 22 4C22 7 19 10 16 10" />
-            <path d="M8 7C8 7 5 4 2 4C2 7 5 10 8 10" />
-            <path d="M12 20C12 20 6 14 6 9C6 6.79 7.79 5 10 5C11.2 5 12 5.5 12 5.5C12 5.5 12.8 5 14 5C16.21 5 18 6.79 18 9C18 14 12 20 12 20Z" />
-          </svg>
-        ),
+        icon: <img src="/logo.png" alt="Magpie" className="w-[14px] h-[14px] object-contain rounded-[3px]" />,
         shortcut: ["↵"],
         onAction: onPaste,
       },
@@ -225,13 +219,7 @@ export function buildClipboardActions({
       {
         id: "paste-plain",
         label: "Paste and Keep Window Open",
-        icon: (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400">
-            <path d="M16 7C16 7 19 4 22 4C22 7 19 10 16 10" />
-            <path d="M8 7C8 7 5 4 2 4C2 7 5 10 8 10" />
-            <path d="M12 20C12 20 6 14 6 9C6 6.79 7.79 5 10 5C11.2 5 12 5.5 12 5.5C12 5.5 12.8 5 14 5C16.21 5 18 6.79 18 9C18 14 12 20 12 20Z" />
-          </svg>
-        ),
+        icon: <img src="/logo.png" alt="Magpie" className="w-[14px] h-[14px] object-contain rounded-[3px]" />,
         shortcut: ["⌥", "↵"],
         onAction: onPastePlain,
       },
