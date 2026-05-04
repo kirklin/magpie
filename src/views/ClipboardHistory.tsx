@@ -1,6 +1,7 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
@@ -8,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
 import { useClipboardStore } from "../stores/clipboard";
+import { useNavigationStore } from "../stores/navigation";
 import { groupByDate } from "../utils/grouping";
 
 export function ClipboardHistory() {
@@ -33,6 +35,7 @@ export function ClipboardHistory() {
     activeApp,
     setActiveApp,
   } = useClipboardStore();
+  const { navigateTo } = useNavigationStore();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
 
@@ -266,10 +269,13 @@ export function ClipboardHistory() {
 
       {/* Bottom action bar */}
       <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0">
-        <div className="flex items-center gap-2.5 text-text-primary">
+        <button
+          className="flex items-center gap-2 text-text-primary hover:text-text-accent transition-colors rounded px-1.5 py-1 -ml-1.5"
+          onClick={() => navigateTo("about")}
+        >
           <img src="/logo.png" alt="Magpie" className="w-5 h-5 object-contain rounded shadow-sm" />
-          <span className="text-[13px] font-medium">Clipboard History</span>
-        </div>
+          <span className="text-[13px] font-medium">Magpie</span>
+        </button>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium">
             Paste to
@@ -287,6 +293,14 @@ export function ClipboardHistory() {
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">K</kbd>
             </div>
+          </button>
+          <div className="w-[1px] h-3.5 bg-border mx-1"></div>
+          <button
+            className="flex items-center justify-center w-5 h-5 text-text-secondary hover:text-text-primary transition-colors"
+            onClick={() => navigateTo("settings")}
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>
