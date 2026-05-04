@@ -1,16 +1,19 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
+import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useSettingsStore } from "../stores/settings";
 
 export function SettingsView() {
   const { navigateTo } = useNavigationStore();
   const { isLoading, loadSettings, settings, updateSetting } = useSettingsStore();
+  const { clearHistory } = useClipboardStore();
   const [autostart, setAutostart] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -18,12 +21,16 @@ export function SettingsView() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        navigateTo("clipboard");
+        if (showClearConfirm) {
+          setShowClearConfirm(false);
+        } else {
+          navigateTo("clipboard");
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loadSettings, navigateTo]);
+  }, [loadSettings, navigateTo, showClearConfirm]);
 
   const handleAutostartChange = async (checked: boolean) => {
     try {
@@ -36,6 +43,11 @@ export function SettingsView() {
     } catch (e) {
       console.error("Failed to toggle autostart", e);
     }
+  };
+
+  const handleClearHistory = async () => {
+    await clearHistory();
+    setShowClearConfirm(false);
   };
 
   if (isLoading) {
@@ -77,9 +89,58 @@ export function SettingsView() {
             />
           </SettingGroup>
 
-
+          <SettingGroup title="数据">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <div className="text-[13px] text-text-primary">清空剪贴板历史</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">已置顶的记录不会被删除</div>
+              </div>
+              <button
+                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                onClick={() => setShowClearConfirm(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                清空
+              </button>
+            </div>
+          </SettingGroup>
         </div>
       </div>
+
+      {/* Clear Confirmation Dialog */}
+      {showClearConfirm && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowClearConfirm(false)}
+        >
+          <div
+            className="mx-6 w-full max-w-[300px] rounded-xl bg-bg-secondary border border-border-primary p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-[15px] font-semibold text-text-primary text-center">
+              确认清空
+            </div>
+            <div className="mt-2 text-[13px] text-text-secondary text-center leading-relaxed">
+              将删除所有未置顶的剪贴板记录，此操作无法撤销。
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                className="flex-1 py-2 text-[13px] font-medium rounded-lg bg-bg-hover text-text-primary hover:bg-bg-active transition-colors"
+                onClick={() => setShowClearConfirm(false)}
+              >
+                取消
+              </button>
+              <button
+                className="flex-1 py-2 text-[13px] font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                onClick={handleClearHistory}
+              >
+                确认清空
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
