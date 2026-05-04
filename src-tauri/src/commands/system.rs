@@ -37,6 +37,14 @@ pub async fn get_app_icon(
     Ok(icon_base64)
 }
 
+#[tauri::command]
+pub async fn get_file_icon(
+    file_path: String,
+) -> Result<String, String> {
+    // We don't cache file icons for now as they might change or be too numerous
+    fetch_file_icon_macos(&file_path)
+}
+
 #[cfg(target_os = "macos")]
 fn fetch_app_icon_macos(bundle_id: &str) -> Result<String, String> {
     use objc2_app_kit::{NSBitmapImageRep, NSWorkspace};
@@ -53,12 +61,31 @@ fn fetch_app_icon_macos(bundle_id: &str) -> Result<String, String> {
 
     let path = url.path().ok_or("No path for app URL")?;
 
+    fetch_icon_for_path(&path, 32.0)
+}
+
+#[cfg(target_os = "macos")]
+fn fetch_file_icon_macos(file_path: &str) -> Result<String, String> {
+    use objc2_foundation::NSString;
+    let path = NSString::from_str(file_path);
+    // Request a larger size for file icons in the preview panel
+    fetch_icon_for_path(&path, 128.0)
+}
+
+#[cfg(target_os = "macos")]
+fn fetch_icon_for_path(path: &objc2_foundation::NSString, size: f64) -> Result<String, String> {
+    use objc2_app_kit::{NSBitmapImageRep, NSWorkspace};
+    use objc2_foundation::NSData;
+    use objc2::rc::Retained;
+    
+    let workspace = NSWorkspace::sharedWorkspace();
+
     // Get icon for the app path
-    let icon = workspace.iconForFile(&path);
+    let icon = workspace.iconForFile(path);
 
     // Set a reasonable size for the icon
-    let size = objc2_foundation::NSSize::new(32.0, 32.0);
-    icon.setSize(size);
+    let ns_size = objc2_foundation::NSSize::new(size, size);
+    icon.setSize(ns_size);
 
     // Convert to TIFF data
     let tiff_data: Retained<NSData> = icon.TIFFRepresentation()

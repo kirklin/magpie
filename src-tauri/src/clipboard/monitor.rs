@@ -30,6 +30,7 @@ pub struct ClipboardChangedPayload {
     pub text_content: Option<String>,
     pub content_preview: Option<String>,
     pub image_path: Option<String>,
+    pub file_paths: Option<String>,
     pub source_app: Option<String>,
     pub source_app_name: Option<String>,
     pub is_pinned: bool,
@@ -122,7 +123,16 @@ async fn read_clipboard_and_store(
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
 
-    // Try to read text content first
+    // 1. Check for file URLs on the pasteboard first (macOS native)
+    #[cfg(target_os = "macos")]
+    {
+        let file_paths = read_file_urls_from_pasteboard();
+        if !file_paths.is_empty() {
+            return store_file_entry(app_handle, state, file_paths).await;
+        }
+    }
+
+    // 2. Try to read text content
     let text_result = app_handle.clipboard().read_text();
 
     match text_result {
@@ -130,7 +140,7 @@ async fn read_clipboard_and_store(
             store_text_entry(app_handle, state, classifier, text).await
         }
         _ => {
-            // Try to read image
+            // 3. Try to read image
             match app_handle.clipboard().read_image() {
                 Ok(image_data) => {
                     store_image_entry(app_handle, state, image_data).await
@@ -138,6 +148,204 @@ async fn read_clipboard_and_store(
                 Err(_) => Ok(None),
             }
         }
+    }
+}
+
+/// Read file URLs from macOS NSPasteboard
+#[cfg(target_os = "macos")]
+fn read_file_urls_from_pasteboard() -> Vec<String> {
+    use objc2_app_kit::NSPasteboard;
+    use objc2_foundation::{NSString, NSArray, NSURL};
+    use objc2::rc::{autoreleasepool, Retained};
+
+    autoreleasepool(|_| {
+        let pasteboard = NSPasteboard::generalPasteboard();
+
+        // Check if the pasteboard contains file URLs
+        let types = NSPasteboard::types(&pasteboard);
+        let has_file_url = types.map_or(false, |ts| {
+            ts.iter().any(|t| {
+                let s = t.to_string();
+                s == "public.file-url" || s == "NSFilenamesPboardType"
+            })
+        });
+
+        if !has_file_url {
+            return vec![];
+        }
+
+        // Method 1: Use NSFilenamesPboardType which returns actual file paths
+        let filenames_type = NSString::from_str("NSFilenamesPboardType");
+        if let Some(obj) = pasteboard.propertyListForType(&filenames_type) {
+            // propertyListForType returns Retained<AnyObject>, cast to NSArray<NSString>
+            // SAFETY: NSFilenamesPboardType always returns an NSArray of NSString file paths
+            let raw_ptr = Retained::into_raw(obj) as *mut NSArray<NSString>;
+            let array: Retained<NSArray<NSString>> = unsafe { Retained::from_raw(raw_ptr).unwrap() };
+
+            let mut paths: Vec<String> = Vec::new();
+            for item in array.iter() {
+                let path = item.to_string();
+                if !path.is_empty() {
+                    paths.push(path);
+                }
+            }
+
+            if !paths.is_empty() {
+                return paths;
+            }
+        }
+
+        // Method 2: Read NSURL from pasteboard items and resolve via NSURL
+        let file_url_type = NSString::from_str("public.file-url");
+        if let Some(items) = pasteboard.pasteboardItems() {
+            let mut paths: Vec<String> = Vec::new();
+            for item in items.iter() {
+                if let Some(url_string) = item.stringForType(&file_url_type) {
+                    let ns_url_str = url_string.to_string();
+                    // Create NSURL from the string and get the file path
+                    let ns_str = NSString::from_str(&ns_url_str);
+                    if let Some(url) = NSURL::URLWithString(&ns_str) {
+                        // Try to get filePathURL first (resolves file reference URLs)
+                        if let Some(file_path_url) = url.filePathURL() {
+                            if let Some(path) = file_path_url.path() {
+                                let p = path.to_string();
+                                if !p.is_empty() {
+                                    paths.push(p);
+                                    continue;
+                                }
+                            }
+                        }
+                        // Fallback: direct path from the URL
+                        if let Some(path) = url.path() {
+                            let p = path.to_string();
+                            if !p.is_empty() {
+                                paths.push(p);
+                            }
+                        }
+                    }
+                }
+            }
+            if !paths.is_empty() {
+                return paths;
+            }
+        }
+
+        vec![]
+    })
+}
+
+/// Store a file clipboard entry
+async fn store_file_entry(
+    app_handle: &AppHandle,
+    state: &Arc<ClipboardMonitorState>,
+    file_paths: Vec<String>,
+) -> Result<Option<ClipboardChangedPayload>, String> {
+    let file_paths_json = serde_json::to_string(&file_paths).map_err(|e| e.to_string())?;
+
+    // Hash the file paths for dedup
+    let mut hasher = Sha256::new();
+    hasher.update(file_paths_json.as_bytes());
+    let result = hasher.finalize();
+    let hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
+
+    // Check if same content
+    let last_hash = state.last_change_count.load(Ordering::SeqCst);
+    let new_hash_i64 = i64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap_or([0; 8]));
+
+    if new_hash_i64 == last_hash {
+        return Ok(None);
+    }
+
+    state.last_change_count.store(new_hash_i64, Ordering::SeqCst);
+
+    // Generate preview from file names
+    let preview = if file_paths.len() == 1 {
+        // Show the filename for single file
+        std::path::Path::new(&file_paths[0])
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| file_paths[0].clone())
+    } else {
+        format!("{} files", file_paths.len())
+    };
+
+    // Calculate actual file sizes from filesystem
+    let byte_size: i64 = file_paths.iter()
+        .map(|p| std::fs::metadata(p).map(|m| m.len() as i64).unwrap_or(0))
+        .sum();
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let (source_app, source_app_name) = get_frontmost_app(app_handle);
+
+    // Insert into database
+    let db_instances = app_handle.state::<DbInstances>();
+    let instances = db_instances.0.read().await;
+
+    if let Some(db) = instances.get("sqlite:magpie.db") {
+        let (id, created_at, access_count) = match db {
+            DbPool::Sqlite(pool) => {
+                // Check for duplicate hash first
+                let existing: Option<(i64, String, i64)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                )
+                .bind(&hash)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+                let (final_id, final_created_at, final_access_count) = if let Some((existing_id, created_at, access_count)) = existing {
+                    sqlx::query(
+                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1 WHERE id = ?",
+                    )
+                    .bind(&now)
+                    .bind(existing_id)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                    (existing_id, created_at, access_count + 1)
+                } else {
+                    let result = sqlx::query(
+                        "INSERT INTO clipboard_entries (content_type, text_content, file_paths, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                    )
+                    .bind("file")
+                    .bind(&file_paths_json) // also store as text_content for search
+                    .bind(&file_paths_json)
+                    .bind(&hash)
+                    .bind(&preview)
+                    .bind(byte_size)
+                    .bind(&source_app)
+                    .bind(&source_app_name)
+                    .bind(&now)
+                    .bind(&now)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                    (result.last_insert_rowid(), now.clone(), 1)
+                };
+
+                (final_id, final_created_at, final_access_count)
+            }
+            #[allow(unreachable_patterns)]
+            _ => return Err("Unsupported database type".to_string()),
+        };
+
+        Ok(Some(ClipboardChangedPayload {
+            id,
+            content_type: "file".to_string(),
+            text_content: Some(file_paths_json.clone()),
+            content_preview: Some(preview),
+            image_path: None,
+            file_paths: Some(file_paths_json),
+            source_app,
+            source_app_name,
+            is_pinned: false,
+            created_at,
+            accessed_at: now,
+            access_count,
+        }))
+    } else {
+        Err("Database not initialized".to_string())
     }
 }
 
@@ -233,6 +441,7 @@ async fn store_text_entry(
             text_content: Some(text),
             content_preview: Some(preview),
             image_path: None,
+            file_paths: None,
             source_app,
             source_app_name,
             is_pinned: false,
@@ -353,6 +562,7 @@ async fn store_image_entry(
             text_content: None,
             content_preview: Some(preview),
             image_path: Some(file_path_str),
+            file_paths: None,
             source_app,
             source_app_name,
             is_pinned: false,

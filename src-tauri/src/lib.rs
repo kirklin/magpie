@@ -49,6 +49,8 @@ pub fn run() {
             commands::clipboard::paste_clipboard_entry,
             commands::clipboard::copy_clipboard_entry,
             commands::clipboard::paste_as_plain_text,
+            commands::clipboard::paste_file_entry,
+            commands::clipboard::copy_file_entry,
             // Snippet commands
             commands::snippet::get_snippets,
             commands::snippet::create_snippet,
@@ -62,6 +64,7 @@ pub fn run() {
             commands::settings::get_default_settings,
             // System commands
             commands::system::get_app_icon,
+            commands::system::get_file_icon,
             commands::system::hide_window,
         ])
         // --- Setup ---

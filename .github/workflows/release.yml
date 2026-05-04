@@ -1,4 +1,4 @@
-name: "Release"
+name: Release
 
 on:
   push:
@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
-            args: "--target universal-apple-darwin"
+          - platform: macos-latest
+            args: --target universal-apple-darwin
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,7 +37,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          workspaces: ./src-tauri -> target
 
       - name: Install dependencies
         run: pnpm install
@@ -48,8 +48,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
-          releaseName: "Magpie v__VERSION__"
-          releaseBody: "See the assets to download this version and install."
+          releaseName: Magpie v__VERSION__
+          releaseBody: See the assets to download this version and install.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

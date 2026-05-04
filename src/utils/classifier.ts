@@ -9,7 +9,7 @@ export function getTypeLabel(type: string): string {
     case "image": return "Image";
     case "color": return "Color Code";
     case "email": return "Email Address";
-    case "file": return "File Path";
+    case "file": return "File";
     default: return "Text";
   }
 }

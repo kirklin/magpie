@@ -21,6 +21,8 @@ export function ClipboardHistory() {
     pasteEntry,
     copyEntry,
     pasteAsPlainText,
+    pasteFileEntry,
+    copyFileEntry,
     deleteEntry,
     togglePin,
     renameEntry,
@@ -66,12 +68,17 @@ export function ClipboardHistory() {
     };
   }, [addNewEntry, setActiveApp]);
 
-  // Paste helper
+  // Paste helper - handles both text and file entries
   const handlePaste = useCallback(async () => {
-    if (selectedEntry?.text_content) {
+    if (!selectedEntry) {
+      return;
+    }
+    if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+      pasteFileEntry(selectedEntry.file_paths);
+    } else if (selectedEntry.text_content) {
       pasteEntry(selectedEntry.text_content);
     }
-  }, [selectedEntry, pasteEntry]);
+  }, [selectedEntry, pasteEntry, pasteFileEntry]);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
@@ -156,12 +163,22 @@ export function ClipboardHistory() {
     activeApp,
     onPaste: handlePaste,
     onPastePlain: async () => {
-      if (selectedEntry?.text_content) {
+      if (!selectedEntry) {
+        return;
+      }
+      if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+        pasteFileEntry(selectedEntry.file_paths);
+      } else if (selectedEntry.text_content) {
         pasteAsPlainText(selectedEntry.text_content);
       }
     },
     onCopy: () => {
-      if (selectedEntry?.text_content) {
+      if (!selectedEntry) {
+        return;
+      }
+      if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+        copyFileEntry(selectedEntry.file_paths);
+      } else if (selectedEntry.text_content) {
         copyEntry(selectedEntry.text_content);
       }
     },
@@ -227,7 +244,9 @@ export function ClipboardHistory() {
                           isSelected={entry.id === selectedId}
                           onClick={() => setSelectedId(entry.id)}
                           onDoubleClick={async () => {
-                            if (entry.text_content) {
+                            if (entry.content_type === "file" && entry.file_paths) {
+                              pasteFileEntry(entry.file_paths);
+                            } else if (entry.text_content) {
                               pasteEntry(entry.text_content);
                             }
                           }}
@@ -259,7 +278,9 @@ export function ClipboardHistory() {
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium">
-            Paste to {activeApp}
+            Paste to
+            {" "}
+            {activeApp}
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
           </span>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>

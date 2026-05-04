@@ -49,6 +49,8 @@ interface ClipboardStore {
   pasteEntry: (text: string) => Promise<void>;
   copyEntry: (text: string) => Promise<void>;
   pasteAsPlainText: (text: string) => Promise<void>;
+  pasteFileEntry: (filePathsJson: string) => Promise<void>;
+  copyFileEntry: (filePathsJson: string) => Promise<void>;
   addNewEntry: (entry: ClipboardEntry) => void;
 }
 
@@ -60,7 +62,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   isLoading: false,
   activeApp: "Active App",
 
-  setActiveApp: (app) => set({ activeApp: app }),
+  setActiveApp: app => set({ activeApp: app }),
 
   setSearchQuery: (query) => {
     set({ searchQuery: query });
@@ -164,6 +166,22 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_as_plain_text", { text });
     } catch (e) {
       console.error("Failed to paste as plain text:", e);
+    }
+  },
+
+  pasteFileEntry: async (filePathsJson) => {
+    try {
+      await invoke("paste_file_entry", { filePathsJson });
+    } catch (e) {
+      console.error("Failed to paste file entry:", e);
+    }
+  },
+
+  copyFileEntry: async (filePathsJson) => {
+    try {
+      await invoke("copy_file_entry", { filePathsJson });
+    } catch (e) {
+      console.error("Failed to copy file entry:", e);
     }
   },
 

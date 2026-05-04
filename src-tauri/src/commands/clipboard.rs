@@ -202,6 +202,91 @@ pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<
     paste::paste_to_active_app(&app_handle, &text, true)
 }
 
+#[tauri::command]
+pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
+    let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
+        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+
+    // Write file URLs to the pasteboard using native API
+    #[cfg(target_os = "macos")]
+    {
+        write_files_to_pasteboard(&file_paths)?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Fallback: write file paths as text
+        app_handle
+            .clipboard()
+            .write_text(&file_paths.join("\n"))
+            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    }
+
+    // Hide the app and paste
+    app_handle.hide().map_err(|e| e.to_string())?;
+    wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
+    paste::paste_to_active_app(&app_handle, "", false)
+}
+
+#[tauri::command]
+pub fn copy_file_entry(file_paths_json: String) -> Result<(), String> {
+    let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
+        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        write_files_to_pasteboard(&file_paths)?;
+    }
+
+    Ok(())
+}
+
+/// Write file paths to macOS NSPasteboard as file URLs
+#[cfg(target_os = "macos")]
+fn write_files_to_pasteboard(file_paths: &[String]) -> Result<(), String> {
+    use objc2_app_kit::NSPasteboard;
+    use objc2_foundation::{NSString, NSArray};
+    use objc2::rc::autoreleasepool;
+
+    autoreleasepool(|_| {
+        let pasteboard = NSPasteboard::generalPasteboard();
+        pasteboard.clearContents();
+
+        // Declare NSFilenamesPboardType and public.file-url
+        let filenames_type = NSString::from_str("NSFilenamesPboardType");
+        let file_url_type = NSString::from_str("public.file-url");
+        let types = NSArray::from_retained_slice(&[
+            NSString::from_str("NSFilenamesPboardType"),
+            NSString::from_str("public.file-url"),
+        ]);
+        // SAFETY: declaring pasteboard types with no owner is safe
+        unsafe { pasteboard.declareTypes_owner(&types, None) };
+
+        // Build an NSArray of NSString paths for the property list
+        let ns_paths: Vec<_> = file_paths.iter()
+            .map(|p| NSString::from_str(p))
+            .collect();
+        let ns_array = NSArray::from_retained_slice(&ns_paths);
+
+        // Set the property list (array of file paths) for the filenames type
+        // SAFETY: we're passing a valid NSArray<NSString> which matches NSFilenamesPboardType's expected format
+        let success = unsafe { pasteboard.setPropertyList_forType(&ns_array, &filenames_type) };
+
+        // Also set the first file as a file URL for apps that prefer public.file-url
+        if let Some(first_path) = file_paths.first() {
+            let encoded = format!("file://{}", first_path.replace(' ', "%20"));
+            let url_str = NSString::from_str(&encoded);
+            pasteboard.setString_forType(&url_str, &file_url_type);
+        }
+
+        if success {
+            Ok(())
+        } else {
+            Err("Failed to write file paths to pasteboard".to_string())
+        }
+    })
+}
+
 /// Polls until the frontmost application is NOT the specified bundle ID
 async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str, app_handle: &tauri::AppHandle) {
     let mut retries = 0;
