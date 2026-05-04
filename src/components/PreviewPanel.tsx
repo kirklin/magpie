@@ -3,7 +3,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import React, { useEffect, useState } from "react";
 import { getTypeLabel } from "../utils/classifier";
 
-type FileCategory = "image" | "video" | "audio" | "pdf" | "other";
+type FileCategory = "image" | "video" | "audio" | "pdf" | "text" | "other";
 
 function getFileCategory(filePath: string): FileCategory {
   const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
@@ -18,6 +18,9 @@ function getFileCategory(filePath: string): FileCategory {
   }
   if (ext === ".pdf") {
     return "pdf";
+  }
+  if ([".txt", ".md", ".json", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".rs", ".py", ".go", ".c", ".cpp", ".h", ".sh", ".yaml", ".yml", ".xml", ".csv", ".log", ".ini", ".conf", ".toml"].includes(ext)) {
+    return "text";
   }
   return "other";
 }
@@ -59,6 +62,25 @@ function formatFileSize(bytes: number): string {
 function FilePreview({ filePath }: { filePath: string }) {
   const category = getFileCategory(filePath);
   const src = convertFileSrc(filePath);
+  const [textContent, setTextContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (category === "text") {
+      let cancelled = false;
+      fetch(src)
+        .then(res => res.text())
+        .then(text => {
+          if (!cancelled) {
+            // Limit preview to ~10000 characters to avoid performance issues
+            setTextContent(text.length > 10000 ? text.substring(0, 10000) + "\n\n... (preview truncated)" : text);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setTextContent("Failed to load text preview.");
+        });
+      return () => { cancelled = true; };
+    }
+  }, [category, src]);
 
   switch (category) {
     case "image":
@@ -95,6 +117,14 @@ function FilePreview({ filePath }: { filePath: string }) {
           type="application/pdf"
           className="w-full h-full rounded-lg"
         />
+      );
+    case "text":
+      return (
+        <div className="w-full h-full overflow-auto bg-bg-secondary rounded-lg p-3 border border-border">
+          <pre className="text-[12px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
+            {textContent === null ? "Loading..." : textContent}
+          </pre>
+        </div>
       );
     default:
       return null;
