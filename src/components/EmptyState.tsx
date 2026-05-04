@@ -1,5 +1,4 @@
 import { Clipboard, Search } from "lucide-react";
-import React from "react";
 
 interface EmptyStateProps {
   icon?: "clipboard" | "search";
