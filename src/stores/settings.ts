@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 let storeInstance: Store | null = null;
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
+export const useSettingsStore = create<SettingsStore>(set => ({
   settings: DEFAULT_SETTINGS,
   isLoading: true,
 
