@@ -15,6 +15,7 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
   const typeIcon = getTypeIcon(entry.content_type);
   const isImage = entry.content_type === "image" && entry.image_path;
   const isFile = entry.content_type === "file" && entry.file_paths;
+  const isColor = entry.content_type === "color";
 
   // Build display name based on content type
   let displayName = entry.custom_name || entry.content_preview || entry.text_content || "(空)";
@@ -94,14 +95,23 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
                       <NativeFileIcon filePath={parsedPaths[0]} className="w-6 h-6" />
                     </div>
                   )
-                : (
-                    <span className={`flex items-center justify-center shrink-0 ${
-                      isSelected ? "text-text-primary" : "text-text-tertiary"
-                    }`}
-                    >
-                      {typeIcon}
-                    </span>
-                  )}
+                : isColor
+                  ? (
+                      <span className={`flex items-center justify-center shrink-0 w-6 h-6 ${
+                        isSelected ? "text-text-primary" : "text-text-tertiary"
+                      }`}
+                      >
+                        <div className="w-4 h-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: displayName }} />
+                      </span>
+                    )
+                  : (
+                      <span className={`flex items-center justify-center shrink-0 ${
+                        isSelected ? "text-text-primary" : "text-text-tertiary"
+                      }`}
+                      >
+                        {typeIcon}
+                      </span>
+                    )}
 
       <div className="flex-1 min-w-0">
         <div className="text-[13px] leading-tight truncate">{displayName}</div>

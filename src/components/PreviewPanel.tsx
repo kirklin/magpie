@@ -69,16 +69,20 @@ function FilePreview({ filePath }: { filePath: string }) {
       let cancelled = false;
       fetch(src)
         .then(res => res.text())
-        .then(text => {
+        .then((text) => {
           if (!cancelled) {
             // Limit preview to ~10000 characters to avoid performance issues
-            setTextContent(text.length > 10000 ? text.substring(0, 10000) + "\n\n... (preview truncated)" : text);
+            setTextContent(text.length > 10000 ? `${text.substring(0, 10000)}\n\n... (preview truncated)` : text);
           }
         })
         .catch(() => {
-          if (!cancelled) setTextContent("Failed to load text preview.");
+          if (!cancelled) {
+            setTextContent("Failed to load text preview.");
+          }
         });
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
   }, [category, src]);
 
@@ -224,6 +228,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
 
   const isImage = entry.content_type === "image" && entry.image_path;
   const isFile = entry.content_type === "file" && entry.file_paths;
+  const isColor = entry.content_type === "color";
   const content = entry.text_content || "";
 
   // Parse file paths for file entries
@@ -266,7 +271,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                       <FilePreview filePath={previewableFile} />
                     </div>
                   ) : filePaths.length === 1 ? (
-                    /* Single non-previewable file: show large native icon */
+                  /* Single non-previewable file: show large native icon */
                     <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-4">
                       <NativeFileIcon filePath={filePaths[0]} className="w-32 h-32 drop-shadow-md" />
                       <div className="text-center px-4">
@@ -279,7 +284,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                       </div>
                     </div>
                   ) : (
-                    /* Multiple files: show list with native icons */
+                  /* Multiple files: show list with native icons */
                     <div className="space-y-2">
                       {filePaths.map((filePath, i) => {
                         const fileName = filePath.split("/").pop() || filePath;
@@ -298,11 +303,23 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                   )}
                 </div>
               )
-            : (
-                <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
-                  {content || "(无文本内容)"}
-                </pre>
-              )}
+            : isColor
+              ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-5">
+                    <div
+                      className="w-32 h-32 rounded-2xl shadow-[inset_0_2px_4px_rgba(0,0,0,0.1),_0_8px_16px_rgba(0,0,0,0.1)] border border-border"
+                      style={{ backgroundColor: content }}
+                    />
+                    <div className="text-[20px] font-mono font-medium text-text-primary uppercase tracking-wide">
+                      {content}
+                    </div>
+                  </div>
+                )
+              : (
+                  <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
+                    {content || "(无文本内容)"}
+                  </pre>
+                )}
       </div>
 
       {/* Information section */}
