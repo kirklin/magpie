@@ -116,6 +116,20 @@ pub fn start_monitor(app_handle: AppHandle) {
     });
 }
 
+/// Read the current pasteboard change count (macOS)
+/// This is an atomically incrementing counter that changes every time
+/// the pasteboard content is modified — the reliable way to detect changes.
+#[cfg(target_os = "macos")]
+fn get_pasteboard_change_count() -> i64 {
+    use objc2_app_kit::NSPasteboard;
+    use objc2::rc::autoreleasepool;
+
+    autoreleasepool(|_| {
+        let pasteboard = NSPasteboard::generalPasteboard();
+        pasteboard.changeCount() as i64
+    })
+}
+
 /// Read clipboard content and store if changed
 async fn read_clipboard_and_store(
     app_handle: &AppHandle,
@@ -124,29 +138,50 @@ async fn read_clipboard_and_store(
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
 
-    // 1. Check for file URLs on the pasteboard first (macOS native)
+    // Step 1: Check if the pasteboard has actually changed using changeCount.
+    // This is much more reliable than comparing content hashes.
+    #[cfg(target_os = "macos")]
+    {
+        let current_count = get_pasteboard_change_count();
+        let last_count = state.last_change_count.load(Ordering::SeqCst);
+
+        if current_count == last_count {
+            return Ok(None); // Pasteboard unchanged, skip
+        }
+
+        // Update the change count immediately so we don't re-process
+        state.last_change_count.store(current_count, Ordering::SeqCst);
+        log::debug!("Pasteboard changeCount: {} -> {}", last_count, current_count);
+    }
+
+    // Step 2: The pasteboard changed — determine what's on it.
+
+    // 2a. Check for file URLs on the pasteboard first (macOS native)
     #[cfg(target_os = "macos")]
     {
         let file_paths = read_file_urls_from_pasteboard();
         if !file_paths.is_empty() {
-            return store_file_entry(app_handle, state, file_paths).await;
+            return store_file_entry(app_handle, file_paths).await;
         }
     }
 
-    // 2. Try to read text content
+    // 2b. Try to read text content
     let text_result = app_handle.clipboard().read_text();
 
     match text_result {
         Ok(text) if !text.is_empty() => {
-            store_text_entry(app_handle, state, classifier, text).await
+            store_text_entry(app_handle, classifier, text).await
         }
         _ => {
-            // 3. Try to read image
+            // 2c. Try to read image
             match app_handle.clipboard().read_image() {
                 Ok(image_data) => {
-                    store_image_entry(app_handle, state, image_data).await
+                    store_image_entry(app_handle, image_data).await
                 }
-                Err(_) => Ok(None),
+                Err(_) => {
+                    log::debug!("Pasteboard changed but no recognizable content found");
+                    Ok(None)
+                },
             }
         }
     }
@@ -238,26 +273,15 @@ fn read_file_urls_from_pasteboard() -> Vec<String> {
 /// Store a file clipboard entry
 async fn store_file_entry(
     app_handle: &AppHandle,
-    state: &Arc<ClipboardMonitorState>,
     file_paths: Vec<String>,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     let file_paths_json = serde_json::to_string(&file_paths).map_err(|e| e.to_string())?;
 
-    // Hash the file paths for dedup
+    // Hash the file paths for database dedup only
     let mut hasher = Sha256::new();
     hasher.update(file_paths_json.as_bytes());
     let result = hasher.finalize();
     let hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
-
-    // Check if same content
-    let last_hash = state.last_change_count.load(Ordering::SeqCst);
-    let new_hash_i64 = i64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap_or([0; 8]));
-
-    if new_hash_i64 == last_hash {
-        return Ok(None);
-    }
-
-    state.last_change_count.store(new_hash_i64, Ordering::SeqCst);
 
     // Generate preview from file names
     let preview = if file_paths.len() == 1 {
@@ -353,25 +377,14 @@ async fn store_file_entry(
 /// Store a text clipboard entry
 async fn store_text_entry(
     app_handle: &AppHandle,
-    state: &Arc<ClipboardMonitorState>,
     classifier: &ContentClassifier,
     text: String,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
-    // Hash the content for dedup
+    // Hash the content for database dedup only
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
     let result = hasher.finalize();
     let hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
-
-    // Check if same content
-    let last_hash = state.last_change_count.load(Ordering::SeqCst);
-    let new_hash_i64 = i64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap_or([0; 8]));
-
-    if new_hash_i64 == last_hash {
-        return Ok(None);
-    }
-
-    state.last_change_count.store(new_hash_i64, Ordering::SeqCst);
 
     // Classify content type
     let content_type = classifier.classify_text(&text);
@@ -458,7 +471,6 @@ async fn store_text_entry(
 /// Store an image clipboard entry
 async fn store_image_entry(
     app_handle: &AppHandle,
-    state: &Arc<ClipboardMonitorState>,
     image_data: tauri::image::Image<'_>,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     let rgba_bytes = image_data.rgba();
@@ -466,21 +478,11 @@ async fn store_image_entry(
         return Ok(None);
     }
 
-    // Hash the image bytes for dedup
+    // Hash the image bytes for database dedup only
     let mut hasher = Sha256::new();
     hasher.update(&rgba_bytes);
     let result = hasher.finalize();
     let hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
-
-    // Check if same content
-    let last_hash = state.last_change_count.load(Ordering::SeqCst);
-    let new_hash_i64 = i64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap_or([0; 8]));
-
-    if new_hash_i64 == last_hash {
-        return Ok(None);
-    }
-
-    state.last_change_count.store(new_hash_i64, Ordering::SeqCst);
 
     // Save image to disk
     let app_data_dir = app_handle.path().app_data_dir()
