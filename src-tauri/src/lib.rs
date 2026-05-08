@@ -140,6 +140,10 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                    // Disable App Nap — macOS suspends Accessory apps when the window
+                    // is hidden, which kills our clipboard monitor timer.
+                    disable_app_nap();
                 }
 
                 let _ = window.set_decorations(false);
@@ -257,4 +261,29 @@ fn request_accessibility_permission() {
     unsafe {
         AXIsProcessTrustedWithOptions(options.as_CFTypeRef());
     }
+}
+
+/// Disable macOS App Nap to keep the clipboard monitor running in the background.
+/// Without this, macOS will suspend timers and background work for Accessory apps
+/// when the window is hidden, causing the monitor to stop detecting clipboard changes.
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    use objc2_foundation::{NSProcessInfo, NSString, NSActivityOptions};
+
+    let process_info = NSProcessInfo::processInfo();
+    let reason = NSString::from_str("Clipboard monitoring requires continuous background execution");
+
+    // NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFULL
+    // This prevents App Nap and timer throttling while allowing the system to sleep
+    let activity_options = NSActivityOptions(0x00FFFFFF);
+
+    // beginActivityWithOptions:reason: returns a token that must be retained
+    // We intentionally leak it because we want this to last for the app's lifetime
+    let _activity = unsafe {
+        process_info.beginActivityWithOptions_reason(activity_options, &reason)
+    };
+    // Leak the activity token so it stays alive forever
+    std::mem::forget(_activity);
+
+    log::info!("App Nap disabled for clipboard monitoring");
 }

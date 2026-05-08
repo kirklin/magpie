@@ -97,8 +97,15 @@ pub fn start_monitor(app_handle: AppHandle) {
                 break;
             }
 
-            match read_clipboard_and_store(&app_handle, &state_clone, &classifier).await {
-                Ok(Some(payload)) => {
+            // Wrap each poll cycle with a timeout to guarantee the monitor
+            // loop never gets stuck — if any cycle takes >5s, skip and retry.
+            let monitor_result = tokio::time::timeout(
+                Duration::from_secs(5),
+                read_clipboard_and_store(&app_handle, &state_clone, &classifier),
+            ).await;
+
+            match monitor_result {
+                Ok(Ok(Some(payload))) => {
                     log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}", 
                         payload.content_type,
                         payload.content_preview.as_deref().unwrap_or("?"),
@@ -108,9 +115,12 @@ pub fn start_monitor(app_handle: AppHandle) {
                         log::error!("[Clipboard] Failed to emit event: {}", e);
                     }
                 }
-                Ok(None) => {} // no change
-                Err(e) => {
+                Ok(Ok(None)) => {} // no change
+                Ok(Err(e)) => {
                     log::error!("[Clipboard] Monitor error: {}", e);
+                }
+                Err(_) => {
+                    log::error!("[Clipboard] Monitor cycle timed out (5s) — skipping this cycle");
                 }
             }
 
@@ -119,18 +129,36 @@ pub fn start_monitor(app_handle: AppHandle) {
     });
 }
 
-/// Read the current pasteboard change count (macOS)
-/// This is an atomically incrementing counter that changes every time
-/// the pasteboard content is modified — the reliable way to detect changes.
+/// Read the current pasteboard change count (macOS).
+/// IMPORTANT: NSPasteboard API must be called on the main thread.
+/// We dispatch via run_on_main_thread with a timeout to avoid deadlocking.
 #[cfg(target_os = "macos")]
-fn get_pasteboard_change_count() -> i64 {
-    use objc2_app_kit::NSPasteboard;
-    use objc2::rc::autoreleasepool;
+fn get_pasteboard_change_count(app_handle: &AppHandle) -> i64 {
+    use std::sync::mpsc;
 
-    autoreleasepool(|_| {
-        let pasteboard = NSPasteboard::generalPasteboard();
-        pasteboard.changeCount() as i64
-    })
+    let (tx, rx) = mpsc::channel();
+    let dispatched = app_handle.run_on_main_thread(move || {
+        use objc2_app_kit::NSPasteboard;
+        use objc2::rc::autoreleasepool;
+
+        let count = autoreleasepool(|_| {
+            let pasteboard = NSPasteboard::generalPasteboard();
+            pasteboard.changeCount() as i64
+        });
+        let _ = tx.send(count);
+    });
+
+    if dispatched.is_err() {
+        log::warn!("[Clipboard] Failed to dispatch changeCount to main thread");
+        return -1;
+    }
+
+    // 100ms timeout — changeCount is very fast, if it takes longer something is wrong
+    rx.recv_timeout(std::time::Duration::from_millis(100))
+        .unwrap_or_else(|_| {
+            log::warn!("[Clipboard] Timed out reading changeCount");
+            -1
+        })
 }
 
 /// Read clipboard content and store if changed
@@ -145,8 +173,13 @@ async fn read_clipboard_and_store(
     // This is much more reliable than comparing content hashes.
     #[cfg(target_os = "macos")]
     {
-        let current_count = get_pasteboard_change_count();
+        let current_count = get_pasteboard_change_count(app_handle);
         let last_count = state.last_change_count.load(Ordering::SeqCst);
+
+        // -1 means we failed to read changeCount (timeout) — skip this cycle
+        if current_count == -1 {
+            return Ok(None);
+        }
 
         if current_count == last_count {
             return Ok(None); // Pasteboard unchanged, skip
@@ -162,7 +195,7 @@ async fn read_clipboard_and_store(
     // 2a. Check for file URLs on the pasteboard first (macOS native)
     #[cfg(target_os = "macos")]
     {
-        let file_paths = read_file_urls_from_pasteboard();
+        let file_paths = read_file_urls_from_pasteboard(app_handle);
         if !file_paths.is_empty() {
             return store_file_entry(app_handle, file_paths).await;
         }
@@ -190,87 +223,97 @@ async fn read_clipboard_and_store(
     }
 }
 
-/// Read file URLs from macOS NSPasteboard
+/// Read file URLs from macOS NSPasteboard.
+/// IMPORTANT: Must dispatch to main thread since NSPasteboard is not thread-safe.
 #[cfg(target_os = "macos")]
-fn read_file_urls_from_pasteboard() -> Vec<String> {
-    use objc2_app_kit::NSPasteboard;
-    use objc2_foundation::{NSString, NSArray, NSURL};
-    use objc2::rc::{autoreleasepool, Retained};
+fn read_file_urls_from_pasteboard(app_handle: &AppHandle) -> Vec<String> {
+    use std::sync::mpsc;
 
-    autoreleasepool(|_| {
-        let pasteboard = NSPasteboard::generalPasteboard();
+    let (tx, rx) = mpsc::channel();
+    let dispatched = app_handle.run_on_main_thread(move || {
+        use objc2_app_kit::NSPasteboard;
+        use objc2_foundation::{NSString, NSArray, NSURL};
+        use objc2::rc::{autoreleasepool, Retained};
 
-        // Check if the pasteboard contains file URLs
-        let types = NSPasteboard::types(&pasteboard);
-        let has_file_url = types.map_or(false, |ts| {
-            ts.iter().any(|t| {
-                let s = t.to_string();
-                s == "public.file-url" || s == "NSFilenamesPboardType"
-            })
-        });
+        let result = autoreleasepool(|_| {
+            let pasteboard = NSPasteboard::generalPasteboard();
 
-        if !has_file_url {
-            return vec![];
-        }
+            // Check if the pasteboard contains file URLs
+            let types = NSPasteboard::types(&pasteboard);
+            let has_file_url = types.map_or(false, |ts| {
+                ts.iter().any(|t| {
+                    let s = t.to_string();
+                    s == "public.file-url" || s == "NSFilenamesPboardType"
+                })
+            });
 
-        // Method 1: Use NSFilenamesPboardType which returns actual file paths
-        let filenames_type = NSString::from_str("NSFilenamesPboardType");
-        if let Some(obj) = pasteboard.propertyListForType(&filenames_type) {
-            // propertyListForType returns Retained<AnyObject>, cast to NSArray<NSString>
-            // SAFETY: NSFilenamesPboardType always returns an NSArray of NSString file paths
-            let raw_ptr = Retained::into_raw(obj) as *mut NSArray<NSString>;
-            let array: Retained<NSArray<NSString>> = unsafe { Retained::from_raw(raw_ptr).unwrap() };
+            if !has_file_url {
+                return vec![];
+            }
 
-            let mut paths: Vec<String> = Vec::new();
-            for item in array.iter() {
-                let path = item.to_string();
-                if !path.is_empty() {
-                    paths.push(path);
+            // Method 1: Use NSFilenamesPboardType which returns actual file paths
+            let filenames_type = NSString::from_str("NSFilenamesPboardType");
+            if let Some(obj) = pasteboard.propertyListForType(&filenames_type) {
+                // SAFETY: NSFilenamesPboardType always returns an NSArray of NSString file paths
+                let raw_ptr = Retained::into_raw(obj) as *mut NSArray<NSString>;
+                let array: Retained<NSArray<NSString>> = unsafe { Retained::from_raw(raw_ptr).unwrap() };
+
+                let mut paths: Vec<String> = Vec::new();
+                for item in array.iter() {
+                    let path = item.to_string();
+                    if !path.is_empty() {
+                        paths.push(path);
+                    }
+                }
+
+                if !paths.is_empty() {
+                    return paths;
                 }
             }
 
-            if !paths.is_empty() {
-                return paths;
-            }
-        }
-
-        // Method 2: Read NSURL from pasteboard items and resolve via NSURL
-        let file_url_type = NSString::from_str("public.file-url");
-        if let Some(items) = pasteboard.pasteboardItems() {
-            let mut paths: Vec<String> = Vec::new();
-            for item in items.iter() {
-                if let Some(url_string) = item.stringForType(&file_url_type) {
-                    let ns_url_str = url_string.to_string();
-                    // Create NSURL from the string and get the file path
-                    let ns_str = NSString::from_str(&ns_url_str);
-                    if let Some(url) = NSURL::URLWithString(&ns_str) {
-                        // Try to get filePathURL first (resolves file reference URLs)
-                        if let Some(file_path_url) = url.filePathURL() {
-                            if let Some(path) = file_path_url.path() {
+            // Method 2: Read NSURL from pasteboard items and resolve via NSURL
+            let file_url_type = NSString::from_str("public.file-url");
+            if let Some(items) = pasteboard.pasteboardItems() {
+                let mut paths: Vec<String> = Vec::new();
+                for item in items.iter() {
+                    if let Some(url_string) = item.stringForType(&file_url_type) {
+                        let ns_url_str = url_string.to_string();
+                        let ns_str = NSString::from_str(&ns_url_str);
+                        if let Some(url) = NSURL::URLWithString(&ns_str) {
+                            if let Some(file_path_url) = url.filePathURL() {
+                                if let Some(path) = file_path_url.path() {
+                                    let p = path.to_string();
+                                    if !p.is_empty() {
+                                        paths.push(p);
+                                        continue;
+                                    }
+                                }
+                            }
+                            if let Some(path) = url.path() {
                                 let p = path.to_string();
                                 if !p.is_empty() {
                                     paths.push(p);
-                                    continue;
                                 }
-                            }
-                        }
-                        // Fallback: direct path from the URL
-                        if let Some(path) = url.path() {
-                            let p = path.to_string();
-                            if !p.is_empty() {
-                                paths.push(p);
                             }
                         }
                     }
                 }
+                if !paths.is_empty() {
+                    return paths;
+                }
             }
-            if !paths.is_empty() {
-                return paths;
-            }
-        }
 
-        vec![]
-    })
+            vec![]
+        });
+        let _ = tx.send(result);
+    });
+
+    if dispatched.is_err() {
+        return vec![];
+    }
+
+    rx.recv_timeout(std::time::Duration::from_millis(200))
+        .unwrap_or_default()
 }
 
 /// Store a file clipboard entry
