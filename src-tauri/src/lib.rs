@@ -10,9 +10,51 @@ use tauri::{Manager, Emitter};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(
+    // Initialize logging: write to both stderr and a log file
+    // Log file location: ~/Library/Application Support/com.magpie.clipboard/magpie.log
+    let log_file_path = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("com.magpie.clipboard");
+    let _ = std::fs::create_dir_all(&log_file_path);
+    let log_file = log_file_path.join("magpie.log");
+
+    // Truncate log file if it's too large (> 5MB)
+    if let Ok(meta) = std::fs::metadata(&log_file) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let _ = std::fs::write(&log_file, b"");
+        }
+    }
+
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file);
+
+    let mut builder = env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("info,magpie=debug")
-    ).init();
+    );
+
+    if let Ok(file) = file {
+        let file = std::sync::Mutex::new(file);
+        builder.format(move |buf, record| {
+            use std::io::Write;
+            let msg = format!(
+                "[{}] {} - {}\n",
+                record.level(),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                record.args()
+            );
+            // Write to stderr (default behavior)
+            let _ = buf.write_all(msg.as_bytes());
+            // Also write to log file
+            if let Ok(mut f) = file.lock() {
+                let _ = f.write_all(msg.as_bytes());
+            }
+            Ok(())
+        });
+    }
+
+    builder.init();
 
     tauri::Builder::default()
         // --- Plugins ---
