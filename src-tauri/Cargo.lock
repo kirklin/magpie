@@ -2562,6 +2562,7 @@ name = "magpie"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-graphics",
  "env_logger",
  "hex",
  "log",

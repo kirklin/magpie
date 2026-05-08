@@ -60,25 +60,46 @@ pub fn copy_to_clipboard(app_handle: &AppHandle, text: &str) -> Result<(), Strin
         .map_err(|e| format!("Failed to write to clipboard: {}", e))
 }
 
-/// Simulate Cmd+V keystroke on macOS using CGEvent
+/// Simulate Cmd+V keystroke on macOS using CGEvent API.
+/// This is more reliable than osascript and doesn't require
+/// separate System Events permission — only Accessibility access.
 #[cfg(target_os = "macos")]
 fn simulate_paste_keystroke() {
-    use std::process::Command;
+    use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
-    // Use osascript for reliable key simulation
-    // This requires Accessibility permissions
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(r#"tell application "System Events" to keystroke "v" using command down"#)
-        .output();
-        
-    if let Ok(out) = output {
-        if !out.status.success() {
-            log::error!("Paste failed: {}", String::from_utf8_lossy(&out.stderr));
-        } else {
-            log::debug!("Paste successful");
+    // Key code 9 = 'V' on macOS
+    const V_KEY: CGKeyCode = 9;
+
+    let source = match CGEventSource::new(CGEventSourceStateID::HIDSystemState) {
+        Ok(s) => s,
+        Err(_) => {
+            log::error!("[Paste] Failed to create CGEventSource");
+            return;
         }
-    } else {
-        log::error!("Failed to execute osascript");
-    }
+    };
+
+    // Key down
+    let key_down = match CGEvent::new_keyboard_event(source.clone(), V_KEY, true) {
+        Ok(e) => e,
+        Err(_) => {
+            log::error!("[Paste] Failed to create key down event");
+            return;
+        }
+    };
+    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
+    key_down.post(core_graphics::event::CGEventTapLocation::HID);
+
+    // Key up
+    let key_up = match CGEvent::new_keyboard_event(source, V_KEY, false) {
+        Ok(e) => e,
+        Err(_) => {
+            log::error!("[Paste] Failed to create key up event");
+            return;
+        }
+    };
+    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
+    key_up.post(core_graphics::event::CGEventTapLocation::HID);
+
+    log::debug!("[Paste] Simulated Cmd+V via CGEvent");
 }

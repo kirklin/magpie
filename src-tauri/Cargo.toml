@@ -62,6 +62,7 @@ sqlx = { version = "0.8.6", features = [
   "sqlite"
 ] }
 env_logger = "0.11.10"
+core-graphics = "0.25.0"
 
 [profile.release]
 codegen-units = 1
