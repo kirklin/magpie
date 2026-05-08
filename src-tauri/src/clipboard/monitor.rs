@@ -99,19 +99,22 @@ pub fn start_monitor(app_handle: AppHandle) {
 
             match read_clipboard_and_store(&app_handle, &state_clone, &classifier).await {
                 Ok(Some(payload)) => {
-                    log::debug!("New clipboard entry: {} ({})", 
+                    log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}", 
+                        payload.content_type,
                         payload.content_preview.as_deref().unwrap_or("?"),
-                        payload.content_type
+                        payload.id
                     );
-                    let _ = app_handle.emit("clipboard://changed", payload);
+                    if let Err(e) = app_handle.emit("clipboard://changed", payload) {
+                        log::error!("[Clipboard] Failed to emit event: {}", e);
+                    }
                 }
                 Ok(None) => {} // no change
                 Err(e) => {
-                    log::error!("Clipboard monitor error: {}", e);
+                    log::error!("[Clipboard] Monitor error: {}", e);
                 }
             }
 
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
     });
 }
@@ -689,7 +692,8 @@ fn adler32(data: &[u8]) -> u32 {
     (b << 16) | a
 }
 
-/// Get the frontmost application info on macOS
+/// Get the frontmost application info on macOS.
+/// Uses recv_timeout to prevent blocking the tokio runtime if the main thread is busy.
 fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
     #[cfg(target_os = "macos")]
     {
@@ -698,7 +702,7 @@ fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>)
         use objc2::rc::autoreleasepool;
 
         let (tx, rx) = mpsc::channel();
-        let _ = app_handle.run_on_main_thread(move || {
+        let dispatched = app_handle.run_on_main_thread(move || {
             let result = autoreleasepool(|_| {
                 let workspace = NSWorkspace::sharedWorkspace();
                 if let Some(app) = workspace.frontmostApplication() {
@@ -715,8 +719,20 @@ fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>)
             });
             let _ = tx.send(result);
         });
+
+        if dispatched.is_err() {
+            log::warn!("[Clipboard] Failed to dispatch to main thread for frontmost app");
+            return (None, None);
+        }
         
-        rx.recv().unwrap_or((None, None))
+        // Use timeout to prevent deadlocking the monitor loop
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(result) => result,
+            Err(_) => {
+                log::warn!("[Clipboard] Timed out getting frontmost app");
+                (None, None)
+            }
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
