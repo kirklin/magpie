@@ -302,7 +302,7 @@ async fn store_file_entry(
         .map(|p| std::fs::metadata(p).map(|m| m.len() as i64).unwrap_or(0))
         .sum();
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let (source_app, source_app_name) = get_frontmost_app(app_handle);
+    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
     // Insert into database
     let db_instances = app_handle.state::<DbInstances>();
@@ -396,7 +396,7 @@ async fn store_text_entry(
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Get the source app (frontmost app)
-    let (source_app, source_app_name) = get_frontmost_app(app_handle);
+    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
     // Insert into database
     let db_instances = app_handle.state::<DbInstances>();
@@ -507,7 +507,7 @@ async fn store_image_entry(
     let byte_size = std::fs::metadata(&file_path).map(|m| m.len() as i64).unwrap_or(rgba_bytes.len() as i64);
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-    let (source_app, source_app_name) = get_frontmost_app(app_handle);
+    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
     // Insert into database
     let db_instances = app_handle.state::<DbInstances>();
@@ -693,43 +693,51 @@ fn adler32(data: &[u8]) -> u32 {
 }
 
 /// Get the frontmost application info on macOS.
-/// Uses recv_timeout to prevent blocking the tokio runtime if the main thread is busy.
-fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
+/// Fully async — runs the blocking main-thread dispatch inside spawn_blocking
+/// with an outer tokio timeout, so the monitor loop is never blocked.
+async fn get_frontmost_app_async(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
     #[cfg(target_os = "macos")]
     {
-        use std::sync::mpsc;
-        use objc2_app_kit::NSWorkspace;
-        use objc2::rc::autoreleasepool;
+        let handle = app_handle.clone();
+        let result = tokio::time::timeout(
+            Duration::from_millis(300),
+            tokio::task::spawn_blocking(move || {
+                use std::sync::mpsc;
+                use objc2_app_kit::NSWorkspace;
+                use objc2::rc::autoreleasepool;
 
-        let (tx, rx) = mpsc::channel();
-        let dispatched = app_handle.run_on_main_thread(move || {
-            let result = autoreleasepool(|_| {
-                let workspace = NSWorkspace::sharedWorkspace();
-                if let Some(app) = workspace.frontmostApplication() {
-                    let bundle_id = app
-                        .bundleIdentifier()
-                        .map(|s| s.to_string());
-                    let name = app
-                        .localizedName()
-                        .map(|s| s.to_string());
-                    (bundle_id, name)
-                } else {
-                    (None, None)
+                let (tx, rx) = mpsc::channel();
+                let dispatched = handle.run_on_main_thread(move || {
+                    let result = autoreleasepool(|_| {
+                        let workspace = NSWorkspace::sharedWorkspace();
+                        if let Some(app) = workspace.frontmostApplication() {
+                            let bundle_id = app
+                                .bundleIdentifier()
+                                .map(|s| s.to_string());
+                            let name = app
+                                .localizedName()
+                                .map(|s| s.to_string());
+                            (bundle_id, name)
+                        } else {
+                            (None, None)
+                        }
+                    });
+                    let _ = tx.send(result);
+                });
+
+                if dispatched.is_err() {
+                    return (None, None);
                 }
-            });
-            let _ = tx.send(result);
-        });
 
-        if dispatched.is_err() {
-            log::warn!("[Clipboard] Failed to dispatch to main thread for frontmost app");
-            return (None, None);
-        }
-        
-        // Use timeout to prevent deadlocking the monitor loop
-        match rx.recv_timeout(Duration::from_millis(200)) {
-            Ok(result) => result,
-            Err(_) => {
-                log::warn!("[Clipboard] Timed out getting frontmost app");
+                rx.recv_timeout(std::time::Duration::from_millis(200))
+                    .unwrap_or((None, None))
+            })
+        ).await;
+
+        match result {
+            Ok(Ok(v)) => v,
+            _ => {
+                log::warn!("[Clipboard] Timed out or failed getting frontmost app");
                 (None, None)
             }
         }
