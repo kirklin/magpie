@@ -117,6 +117,24 @@ pub fn run() {
             tray::create_tray(&handle)
                 .expect("Failed to create system tray");
 
+            // Check Accessibility permission (required for paste simulation)
+            #[cfg(target_os = "macos")]
+            {
+                if !check_accessibility_permission() {
+                    log::warn!("Accessibility permission not granted — paste will not work!");
+                    // Show system prompt asking user to grant permission
+                    request_accessibility_permission();
+
+                    // Also show a notification so the user knows
+                    use tauri_plugin_notification::NotificationExt;
+                    let _ = app.notification()
+                        .builder()
+                        .title("Magpie 需要辅助功能权限")
+                        .body("请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie，否则无法粘贴内容到其他应用。")
+                        .show();
+                }
+            }
+
             // Configure main window
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
@@ -206,5 +224,37 @@ pub fn show_window(handle: &tauri::AppHandle) {
         let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// Check if the app has Accessibility permission (macOS)
+#[cfg(target_os = "macos")]
+fn check_accessibility_permission() -> bool {
+    // AXIsProcessTrusted is in ApplicationServices framework
+    unsafe extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
+}
+
+/// Request Accessibility permission by showing the system prompt (macOS)
+#[cfg(target_os = "macos")]
+fn request_accessibility_permission() {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+
+    unsafe extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: core_foundation::base::CFTypeRef) -> bool;
+    }
+
+    // kAXTrustedCheckOptionPrompt = true → shows the system dialog
+    let key = CFString::new("AXTrustedCheckOptionPrompt");
+    let value = CFBoolean::true_value();
+    let options = CFDictionary::from_CFType_pairs(&[(key, value)]);
+
+    unsafe {
+        AXIsProcessTrustedWithOptions(options.as_CFTypeRef());
     }
 }
