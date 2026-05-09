@@ -1,8 +1,9 @@
 {
   "name": "magpie",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
+  "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "tauri dev",
     "dev:vite": "vite",
@@ -46,5 +47,10 @@
     "tailwindcss": "^4.2.4",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
