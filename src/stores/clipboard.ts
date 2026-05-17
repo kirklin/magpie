@@ -50,6 +50,8 @@ interface ClipboardStore {
   pasteAsPlainText: (text: string) => Promise<void>;
   pasteFileEntry: (filePathsJson: string) => Promise<void>;
   copyFileEntry: (filePathsJson: string) => Promise<void>;
+  pasteImageEntry: (imagePath: string) => Promise<void>;
+  copyImageEntry: (imagePath: string) => Promise<void>;
   updateEntryContent: (id: number, content: string) => Promise<void>;
   appendToClipboard: (text: string) => Promise<void>;
   saveAsFile: (content: string, defaultName: string) => Promise<boolean>;
@@ -231,6 +233,22 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("copy_file_entry", { filePathsJson });
     } catch (e) {
       console.error("Failed to copy file entry:", e);
+    }
+  },
+
+  pasteImageEntry: async (imagePath) => {
+    try {
+      await invoke("paste_image_entry", { imagePath });
+    } catch (e) {
+      console.error("Failed to paste image entry:", e);
+    }
+  },
+
+  copyImageEntry: async (imagePath) => {
+    try {
+      await invoke("copy_image_entry", { imagePath });
+    } catch (e) {
+      console.error("Failed to copy image entry:", e);
     }
   },
 

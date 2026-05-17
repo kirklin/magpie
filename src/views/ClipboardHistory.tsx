@@ -28,6 +28,8 @@ export function ClipboardHistory() {
     pasteAsPlainText,
     pasteFileEntry,
     copyFileEntry,
+    pasteImageEntry,
+    copyImageEntry,
     deleteEntry,
     togglePin,
     clearHistory,
@@ -88,22 +90,26 @@ export function ClipboardHistory() {
 
   const handlePaste = useCallback(async () => {
     if (!selectedEntry) return;
-    if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+      pasteImageEntry(selectedEntry.image_path);
+    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
       pasteFileEntry(selectedEntry.file_paths);
     } else if (selectedEntry.text_content) {
       pasteEntry(selectedEntry.text_content);
     }
-  }, [selectedEntry, pasteEntry, pasteFileEntry]);
+  }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry]);
 
   const handleCopy = useCallback(() => {
     if (!selectedEntry) return;
-    if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+      copyImageEntry(selectedEntry.image_path);
+    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
       copyFileEntry(selectedEntry.file_paths);
     } else if (selectedEntry.text_content) {
       copyEntry(selectedEntry.text_content);
     }
     toast.add("Copied to clipboard");
-  }, [selectedEntry, copyEntry, copyFileEntry, toast]);
+  }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast]);
 
   const handlePastePlainText = useCallback(async () => {
     if (!selectedEntry?.text_content) return;
@@ -387,7 +393,9 @@ export function ClipboardHistory() {
                           isSelected={entry.id === selectedId}
                           onClick={() => setSelectedId(entry.id)}
                           onDoubleClick={async () => {
-                            if (entry.content_type === "file" && entry.file_paths) {
+                            if (entry.content_type === "image" && entry.image_path) {
+                              pasteImageEntry(entry.image_path);
+                            } else if (entry.content_type === "file" && entry.file_paths) {
                               pasteFileEntry(entry.file_paths);
                             } else if (entry.text_content) {
                               pasteEntry(entry.text_content);

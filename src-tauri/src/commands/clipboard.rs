@@ -164,6 +164,81 @@ pub async fn rename_clipboard_entry(
     }
 }
 
+/// Paste an image entry by reading the saved PNG file and writing it to the pasteboard
+#[tauri::command]
+pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // Read the PNG file
+        let png_data = std::fs::read(&image_path)
+            .map_err(|e| format!("Failed to read image file: {}", e))?;
+
+        // Write PNG data to pasteboard on main thread
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = app_handle.run_on_main_thread(move || {
+            use objc2_app_kit::NSPasteboard;
+            use objc2_foundation::{NSData, NSString};
+            use objc2::rc::autoreleasepool;
+
+            let result = autoreleasepool(|_| {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+
+                let png_type = NSString::from_str("public.png");
+                let ns_data = NSData::with_bytes(&png_data);
+                let success = pasteboard.setData_forType(Some(&ns_data), &png_type);
+                success
+            });
+            let _ = tx.send(result);
+        });
+
+        let success = rx.recv().map_err(|e| e.to_string())?;
+        if !success {
+            return Err("Failed to write image to pasteboard".to_string());
+        }
+
+        // Hide and paste
+        app_handle.hide().map_err(|e| e.to_string())?;
+        wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
+        paste::paste_to_active_app(&app_handle, "", false)?;
+    }
+
+    Ok(())
+}
+
+/// Copy an image entry to the clipboard without pasting
+#[tauri::command]
+pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let png_data = std::fs::read(&image_path)
+            .map_err(|e| format!("Failed to read image file: {}", e))?;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = app_handle.run_on_main_thread(move || {
+            use objc2_app_kit::NSPasteboard;
+            use objc2_foundation::{NSData, NSString};
+            use objc2::rc::autoreleasepool;
+
+            let result = autoreleasepool(|_| {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+                let png_type = NSString::from_str("public.png");
+                let ns_data = NSData::with_bytes(&png_data);
+                pasteboard.setData_forType(Some(&ns_data), &png_type)
+            });
+            let _ = tx.send(result);
+        });
+
+        let success = rx.recv().map_err(|e| e.to_string())?;
+        if !success {
+            return Err("Failed to write image to pasteboard".to_string());
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
     // 1. Write to clipboard
