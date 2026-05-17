@@ -442,7 +442,7 @@ export function ClipboardHistory() {
       </div>
 
       {/* Bottom action bar */}
-      <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0" onMouseDown={e => { if ((e.target as HTMLElement).tagName !== 'BUTTON') e.preventDefault(); }}>
+      <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0" onMouseDown={e => e.preventDefault()}>
         <button
           className="flex items-center gap-2 text-text-primary hover:text-text-accent transition-colors rounded px-1.5 py-1 -ml-1.5"
           onClick={() => navigateTo("about")}

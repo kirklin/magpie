@@ -138,6 +138,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
         {value && (
           <button
             className="no-drag w-5 h-5 flex items-center justify-center border-none bg-bg-tertiary text-text-secondary rounded-full cursor-pointer text-[10px] transition-all duration-100 hover:bg-bg-active hover:text-text-primary shrink-0"
+            onMouseDown={e => e.preventDefault()}
             onClick={() => onChange("")}
             title="清除"
           >
@@ -149,6 +150,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
         <div className="relative no-drag">
           <button
             className="flex items-center gap-2 bg-transparent text-text-secondary text-[13px] px-2.5 py-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
+            onMouseDown={e => e.preventDefault()}
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           >
             {currentFilterLabel}
@@ -159,9 +161,13 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
             <>
               <div
                 className="fixed inset-0 z-10"
+                onMouseDown={e => e.preventDefault()}
                 onClick={() => setIsDropdownOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-1 w-44 bg-bg-secondary/95 backdrop-blur-xl border border-border rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-1.5 z-20 animate-scale-in origin-top-right">
+              <div
+                className="absolute right-0 top-full mt-1 w-44 bg-bg-secondary/95 backdrop-blur-xl border border-border rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-1.5 z-20 animate-scale-in origin-top-right"
+                onMouseDown={e => e.preventDefault()}
+              >
                 {FILTER_OPTIONS.map((option, index) => (
                   <button
                     key={option.value || "all"}
