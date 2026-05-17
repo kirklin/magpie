@@ -5,6 +5,7 @@ import { Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { EditContentModal } from "../components/EditContentModal";
 import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
@@ -43,6 +44,7 @@ export function ClipboardHistory() {
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
 
   const deferredSearch = useDeferredValue(searchQuery);
@@ -154,9 +156,12 @@ export function ClipboardHistory() {
   }, [selectedId, deleteEntry]);
 
   const handleClearHistory = useCallback(() => {
-    if (window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
-      clearHistory();
-    }
+    setIsConfirmClearOpen(true);
+  }, []);
+
+  const handleConfirmClear = useCallback(() => {
+    clearHistory();
+    setIsConfirmClearOpen(false);
   }, [clearHistory]);
 
   // --- Keyboard navigation ---
@@ -432,6 +437,16 @@ export function ClipboardHistory() {
         initialContent={selectedEntry?.text_content ?? ""}
         onSave={handleSaveEditContent}
         onClose={() => setIsEditModalOpen(false)}
+      />
+
+      {/* Confirm Clear History Modal */}
+      <ConfirmModal
+        isOpen={isConfirmClearOpen}
+        title="Clear All History"
+        message="All clipboard history will be permanently deleted. Pinned items will be kept."
+        confirmLabel="Clear All"
+        onConfirm={handleConfirmClear}
+        onCancel={() => setIsConfirmClearOpen(false)}
       />
     </div>
   );
