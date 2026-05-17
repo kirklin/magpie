@@ -59,6 +59,7 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
 
   return (
     <div
+      data-entry-id={entry.id}
       className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer rounded-md mx-2 my-0.5 select-none ${
         isSelected
           ? "bg-bg-active text-text-primary shadow-sm"

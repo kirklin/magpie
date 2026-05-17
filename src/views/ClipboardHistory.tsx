@@ -10,6 +10,7 @@ import { EditContentModal } from "../components/EditContentModal";
 import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
+import { ToastContainer, useToastStore } from "../components/Toast";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { groupByDate } from "../utils/grouping";
@@ -41,11 +42,13 @@ export function ClipboardHistory() {
     pasteAndKeepWindow,
   } = useClipboardStore();
   const { navigateTo } = useNavigationStore();
+  const toast = useToastStore();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -99,7 +102,8 @@ export function ClipboardHistory() {
     } else if (selectedEntry.text_content) {
       copyEntry(selectedEntry.text_content);
     }
-  }, [selectedEntry, copyEntry, copyFileEntry]);
+    toast.add("Copied to clipboard");
+  }, [selectedEntry, copyEntry, copyFileEntry, toast]);
 
   const handlePastePlainText = useCallback(async () => {
     if (!selectedEntry?.text_content) return;
@@ -110,8 +114,9 @@ export function ClipboardHistory() {
     if (!selectedEntry) return;
     if (selectedEntry.text_content) {
       pasteAndKeepWindow(selectedEntry.text_content);
+      toast.add("Pasted (window kept open)");
     }
-  }, [selectedEntry, pasteAndKeepWindow]);
+  }, [selectedEntry, pasteAndKeepWindow, toast]);
 
   const handleOpenUrl = useCallback(() => {
     if (!selectedEntry?.text_content) return;
@@ -121,7 +126,8 @@ export function ClipboardHistory() {
   const handleAppendToClipboard = useCallback(() => {
     if (!selectedEntry?.text_content) return;
     appendToClipboard(selectedEntry.text_content);
-  }, [selectedEntry, appendToClipboard]);
+    toast.add("Appended to clipboard");
+  }, [selectedEntry, appendToClipboard, toast]);
 
   const handleEditContent = useCallback(() => {
     if (!selectedEntry?.text_content) return;
@@ -131,11 +137,15 @@ export function ClipboardHistory() {
   const handleSaveEditContent = useCallback((content: string) => {
     if (!selectedId) return;
     updateEntryContent(selectedId, content);
-  }, [selectedId, updateEntryContent]);
+    toast.add("Content updated");
+  }, [selectedId, updateEntryContent, toast]);
 
   const handleTogglePin = useCallback(() => {
-    if (selectedId) togglePin(selectedId);
-  }, [selectedId, togglePin]);
+    if (!selectedId) return;
+    const wasPinned = selectedEntry?.is_pinned;
+    togglePin(selectedId);
+    toast.add(wasPinned ? "Unpinned" : "Pinned to top");
+  }, [selectedId, selectedEntry, togglePin, toast]);
 
   const handleSaveAsFile = useCallback(() => {
     if (!selectedEntry) return;
@@ -152,8 +162,11 @@ export function ClipboardHistory() {
   }, [selectedEntry, saveAsFile]);
 
   const handleDelete = useCallback(() => {
-    if (selectedId) deleteEntry(selectedId);
-  }, [selectedId, deleteEntry]);
+    if (selectedId) {
+      deleteEntry(selectedId);
+      toast.add("Deleted");
+    }
+  }, [selectedId, deleteEntry, toast]);
 
   const handleClearHistory = useCallback(() => {
     setIsConfirmClearOpen(true);
@@ -162,14 +175,15 @@ export function ClipboardHistory() {
   const handleConfirmClear = useCallback(() => {
     clearHistory();
     setIsConfirmClearOpen(false);
-  }, [clearHistory]);
+    toast.add("History cleared");
+  }, [clearHistory, toast]);
 
   // --- Keyboard navigation ---
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       // Don't handle when modals are open
-      if (isActionPanelOpen || isEditModalOpen) return;
+      if (isActionPanelOpen || isEditModalOpen || isConfirmClearOpen) return;
 
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
@@ -278,7 +292,7 @@ export function ClipboardHistory() {
       }
     },
     [
-      entries, selectedId, selectedEntry, isActionPanelOpen, isEditModalOpen,
+      entries, selectedId, selectedEntry, isActionPanelOpen, isEditModalOpen, isConfirmClearOpen,
       setSelectedId, handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
       handleDelete, handleTogglePin, handleEditContent, handleOpenUrl,
       handleAppendToClipboard, handleSaveAsFile, handleClearHistory, navigateTo,
@@ -296,6 +310,13 @@ export function ClipboardHistory() {
       setSelectedId(entries[0].id);
     }
   }, [entries, selectedId, setSelectedId]);
+
+  // Scroll selected item into view on keyboard navigation
+  useEffect(() => {
+    if (!selectedId || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-entry-id="${selectedId}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
 
   // Build grouped actions for the action panel
   const actionGroups = useMemo(() => buildClipboardActionGroups({
@@ -342,7 +363,7 @@ export function ClipboardHistory() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel — entry list */}
-        <div className="w-[380px] shrink-0 overflow-y-auto border-r border-border">
+        <div ref={listRef} className="w-[380px] shrink-0 overflow-y-auto border-r border-border">
           {entries.length === 0
             ? (
                 <EmptyState
@@ -448,6 +469,9 @@ export function ClipboardHistory() {
         onConfirm={handleConfirmClear}
         onCancel={() => setIsConfirmClearOpen(false)}
       />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
