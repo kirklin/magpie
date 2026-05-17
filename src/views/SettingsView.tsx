@@ -5,10 +5,10 @@ import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
 import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
+import { ThemePicker } from "../components/settings/ThemePicker";
 import { useToastStore } from "../components/Toast";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
-import type { ThemeMode } from "../stores/settings";
 import { useSettingsStore } from "../stores/settings";
 
 export function SettingsView() {
@@ -131,15 +131,9 @@ export function SettingsView() {
           </SettingGroup>
 
           <SettingGroup title="外观">
-            <SettingSelect
-              label="主题"
-              options={[
-                { label: "跟随系统", value: "system" },
-                { label: "深色", value: "dark" },
-                { label: "浅色", value: "light" },
-              ]}
+            <ThemePicker
               value={settings.theme}
-              onChange={val => updateSetting("theme", val as ThemeMode)}
+              onChange={val => updateSetting("theme", val)}
             />
           </SettingGroup>
 
