@@ -12,6 +12,7 @@ interface SearchBarProps {
 
 export interface SearchBarRef {
   toggleFilter: () => void;
+  focus: () => void;
 }
 
 const FILTER_OPTIONS: { value: string | null; label: string; icon: React.ReactNode }[] = [
@@ -32,8 +33,20 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
+    // Focus search input on mount and whenever the Tauri window gains focus
     useEffect(() => {
       inputRef.current?.focus();
+
+      let unlisten: (() => void) | undefined;
+      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+        getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+          if (focused) {
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }
+        }).then(fn => { unlisten = fn; });
+      });
+
+      return () => unlisten?.();
     }, []);
 
     // When dropdown opens, highlight the currently active filter
@@ -96,6 +109,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
 
     useImperativeHandle(ref, () => ({
       toggleFilter: () => setIsDropdownOpen(prev => !prev),
+      focus: () => inputRef.current?.focus(),
     }));
 
     const currentFilterLabel = FILTER_OPTIONS.find(o => o.value === activeFilter)?.label || "All Types";

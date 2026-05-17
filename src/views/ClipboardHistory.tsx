@@ -202,7 +202,8 @@ export function ClipboardHistory() {
       if (isActionPanelOpen || isEditModalOpen || isConfirmClearOpen) return;
 
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
+      // When typing in the search input, only handle navigation keys and ⌘ shortcuts
+      if (target.tagName === "INPUT" && !e.metaKey && !e.ctrlKey && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
         return;
       }
 
@@ -326,6 +327,13 @@ export function ClipboardHistory() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
+
+  // Refocus search input when overlays close
+  useEffect(() => {
+    if (!isActionPanelOpen && !isEditModalOpen && !isConfirmClearOpen) {
+      requestAnimationFrame(() => searchBarRef.current?.focus());
+    }
+  }, [isActionPanelOpen, isEditModalOpen, isConfirmClearOpen]);
 
   // Auto-select first item
   useEffect(() => {
