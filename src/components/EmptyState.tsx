@@ -7,17 +7,25 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon = "clipboard", title, subtitle }: EmptyStateProps) {
-  const IconComponent = icon === "search" ? Search : Clipboard;
+  const isSearch = icon === "search";
+  const IconComponent = isSearch ? Search : Clipboard;
 
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-8 h-full text-center animate-fade-in">
-      <div className="w-12 h-12 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-1">
-        <IconComponent size={24} className="text-text-tertiary" strokeWidth={1.5} />
+    <div className="flex flex-col items-center justify-center gap-4 p-8 h-full text-center animate-fade-in select-none">
+      {/* Layered icon with subtle glow */}
+      <div className="relative">
+        <div className="absolute inset-0 rounded-full bg-bg-hover blur-xl scale-150 opacity-60" />
+        <div className="relative w-10 h-10 rounded-xl bg-bg-tertiary/60 border border-border flex items-center justify-center backdrop-blur-sm">
+          <IconComponent size={18} className="text-text-tertiary" strokeWidth={1.5} />
+        </div>
       </div>
-      <div className="text-[15px] text-text-secondary font-medium">{title}</div>
-      {subtitle && (
-        <div className="text-xs text-text-tertiary max-w-60 leading-relaxed">{subtitle}</div>
-      )}
+
+      <div className="space-y-1.5">
+        <div className="text-[13px] text-text-secondary/80 font-medium">{title}</div>
+        {subtitle && (
+          <div className="text-[11px] text-text-tertiary/60 max-w-48 leading-relaxed">{subtitle}</div>
+        )}
+      </div>
     </div>
   );
 }

@@ -219,12 +219,17 @@ interface PreviewPanelProps {
 export function PreviewPanel({ entry }: PreviewPanelProps) {
   if (!entry) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-tertiary gap-3">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M9 9h6v6H9z" />
-        </svg>
-        <span className="text-sm">选择一个条目查看详情</span>
+      <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
+        <div className="relative">
+          <div className="absolute inset-0 rounded-full bg-bg-hover blur-xl scale-150 opacity-60" />
+          <div className="relative w-10 h-10 rounded-xl bg-bg-tertiary/60 border border-border flex items-center justify-center backdrop-blur-sm">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-text-tertiary">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M9 9h6v6H9z" />
+            </svg>
+          </div>
+        </div>
+        <span className="text-[13px] text-text-secondary/80 font-medium">选择一个条目查看详情</span>
       </div>
     );
   }
