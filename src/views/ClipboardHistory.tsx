@@ -42,6 +42,7 @@ export function ClipboardHistory() {
     appendToClipboard,
     saveAsFile,
     pasteAndKeepWindow,
+    pasteImageAndKeepWindow,
   } = useClipboardStore();
   const { navigateTo } = useNavigationStore();
   const toast = useToastStore();
@@ -118,11 +119,14 @@ export function ClipboardHistory() {
 
   const handlePasteKeepWindow = useCallback(async () => {
     if (!selectedEntry) return;
-    if (selectedEntry.text_content) {
+    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+      pasteImageAndKeepWindow(selectedEntry.image_path);
+      toast.add("Pasted (window kept open)");
+    } else if (selectedEntry.text_content) {
       pasteAndKeepWindow(selectedEntry.text_content);
       toast.add("Pasted (window kept open)");
     }
-  }, [selectedEntry, pasteAndKeepWindow, toast]);
+  }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, toast]);
 
   const handleOpenUrl = useCallback(() => {
     if (!selectedEntry?.text_content) return;

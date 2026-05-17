@@ -56,6 +56,7 @@ interface ClipboardStore {
   appendToClipboard: (text: string) => Promise<void>;
   saveAsFile: (content: string, defaultName: string) => Promise<boolean>;
   pasteAndKeepWindow: (text: string) => Promise<void>;
+  pasteImageAndKeepWindow: (imagePath: string) => Promise<void>;
   addNewEntry: (entry: ClipboardEntry) => void;
 }
 
@@ -181,6 +182,14 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_and_keep_window", { text });
     } catch (e) {
       console.error("Failed to paste and keep window:", e);
+    }
+  },
+
+  pasteImageAndKeepWindow: async (imagePath) => {
+    try {
+      await invoke("paste_image_and_keep_window", { imagePath });
+    } catch (e) {
+      console.error("Failed to paste image and keep window:", e);
     }
   },
 

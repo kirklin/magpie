@@ -479,6 +479,64 @@ pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Resul
     Ok(())
 }
 
+/// Paste an image entry while keeping the Magpie window visible.
+#[tauri::command]
+pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    // 1. Write image to pasteboard
+    #[cfg(target_os = "macos")]
+    {
+        let png_data = std::fs::read(&image_path)
+            .map_err(|e| format!("Failed to read image file: {}", e))?;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = app_handle.run_on_main_thread(move || {
+            use objc2_app_kit::NSPasteboard;
+            use objc2_foundation::{NSData, NSString};
+            use objc2::rc::autoreleasepool;
+
+            let result = autoreleasepool(|_| {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+                let png_type = NSString::from_str("public.png");
+                let ns_data = NSData::with_bytes(&png_data);
+                pasteboard.setData_forType(Some(&ns_data), &png_type)
+            });
+            let _ = tx.send(result);
+        });
+
+        let success = rx.recv().map_err(|e| e.to_string())?;
+        if !success {
+            return Err("Failed to write image to pasteboard".to_string());
+        }
+    }
+
+    // 2. Activate target app, paste, re-focus (same as text version)
+    let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
+    let bundle_id = prev_state.0.lock().unwrap().clone();
+    let Some(target_bundle_id) = bundle_id else {
+        return Err("No previous app to paste to".to_string());
+    };
+
+    let skip = app_handle.state::<crate::SkipBlurHide>();
+    skip.0.store(true, Ordering::Relaxed);
+
+    activate_app_by_bundle_id(&app_handle, &target_bundle_id);
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    paste::paste_to_active_app(&app_handle, "", false)?;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+
+    skip.0.store(false, Ordering::Relaxed);
+
+    Ok(())
+}
+
 /// Activate a macOS application by its bundle identifier.
 /// Uses NSRunningApplication to bring the app to the foreground.
 #[cfg(target_os = "macos")]
