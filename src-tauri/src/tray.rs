@@ -8,12 +8,12 @@ use crate::show_window;
 
 /// Create and configure the system tray
 pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "show", "打开/隐藏 Magpie", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "打开/隐藏 Magpie", true, Some("CmdOrCtrl+Shift+V"))?;
     let separator1 = PredefinedMenuItem::separator(app)?;
-    let settings = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "设置…", true, Some("CmdOrCtrl+,"))?;
     let about = MenuItem::with_id(app, "about", "关于 Magpie", true, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
 
     let menu = Menu::with_items(
         app,

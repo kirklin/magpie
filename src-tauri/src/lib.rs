@@ -1,6 +1,7 @@
 mod clipboard;
 mod commands;
 mod database;
+mod menu;
 mod tray;
 
 use std::sync::Arc;
@@ -116,6 +117,11 @@ pub fn run() {
             // Create system tray
             tray::create_tray(&handle)
                 .expect("Failed to create system tray");
+
+            // Create standard macOS application menu bar
+            // Provides ⌘, ⌘Q, ⌘H, ⌘W and standard Edit menu shortcuts
+            menu::create_app_menu(&handle)
+                .expect("Failed to create application menu");
 
             // Check Accessibility permission (required for paste simulation)
             #[cfg(target_os = "macos")]

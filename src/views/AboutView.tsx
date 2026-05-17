@@ -1,13 +1,20 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowLeft } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingRow } from "../components/settings/SettingRow";
 import { useNavigationStore } from "../stores/navigation";
 
 export function AboutView() {
   const { navigateTo } = useNavigationStore();
+  const [version, setVersion] = useState("...");
 
+  useEffect(() => {
+    // Dynamically read version from Tauri config
+    import("@tauri-apps/api/app").then(({ getVersion }) => {
+      getVersion().then(v => setVersion(v));
+    }).catch(() => setVersion("0.1.1"));
+  }, []);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -42,7 +49,7 @@ export function AboutView() {
         <div className="w-full">
           <SettingGroup>
             <SettingRow label="名称" value="Magpie" />
-            <SettingRow label="版本" value="v0.1.0" />
+            <SettingRow label="版本" value={`v${version}`} />
             <SettingRow
               label="开发者"
               value={(

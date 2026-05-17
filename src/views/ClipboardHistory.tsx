@@ -137,6 +137,13 @@ export function ClipboardHistory() {
           }
           break;
         }
+        case ",": {
+          if (e.metaKey) {
+            e.preventDefault();
+            navigateTo("settings");
+          }
+          break;
+        }
         case "Escape": {
           e.preventDefault();
           invoke("hide_window");
