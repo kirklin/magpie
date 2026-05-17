@@ -59,6 +59,8 @@ interface ClipboardStore {
   pasteImageAndKeepWindow: (imagePath: string) => Promise<void>;
   pasteFileAndKeepWindow: (filePathsJson: string) => Promise<void>;
   addNewEntry: (entry: ClipboardEntry) => void;
+  exportHistory: () => Promise<number>;
+  importHistory: () => Promise<number>;
 }
 
 export const useClipboardStore = create<ClipboardStore>((set, get) => ({
@@ -289,5 +291,28 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       });
       return { entries: newEntries };
     });
+  },
+
+  exportHistory: async () => {
+    try {
+      return await invoke<number>("export_clipboard_history");
+    } catch (e) {
+      console.error("Failed to export history:", e);
+      throw e;
+    }
+  },
+
+  importHistory: async () => {
+    try {
+      const count = await invoke<number>("import_clipboard_history");
+      if (count > 0) {
+        // Refresh entries after import
+        await get().fetchEntries();
+      }
+      return count;
+    } catch (e) {
+      console.error("Failed to import history:", e);
+      throw e;
+    }
   },
 }));

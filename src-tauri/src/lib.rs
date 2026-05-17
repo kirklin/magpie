@@ -112,6 +112,8 @@ pub fn run() {
             commands::clipboard::paste_and_keep_window,
             commands::clipboard::paste_image_and_keep_window,
             commands::clipboard::paste_file_and_keep_window,
+            commands::clipboard::export_clipboard_history,
+            commands::clipboard::import_clipboard_history,
             // Snippet commands
             commands::snippet::get_snippets,
             commands::snippet::create_snippet,

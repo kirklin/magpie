@@ -1,9 +1,10 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
+import { useToastStore } from "../components/Toast";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useSettingsStore } from "../stores/settings";
@@ -11,9 +12,12 @@ import { useSettingsStore } from "../stores/settings";
 export function SettingsView() {
   const { navigateTo } = useNavigationStore();
   const { isLoading, loadSettings, settings, updateSetting } = useSettingsStore();
-  const { clearHistory } = useClipboardStore();
+  const { clearHistory, exportHistory, importHistory } = useClipboardStore();
+  const addToast = useToastStore(s => s.add);
   const [autostart, setAutostart] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -48,6 +52,36 @@ export function SettingsView() {
   const handleClearHistory = async () => {
     await clearHistory();
     setShowClearConfirm(false);
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const count = await exportHistory();
+      if (count > 0) {
+        addToast(`已导出 ${count} 条记录`);
+      }
+    } catch (e) {
+      addToast(`导出失败: ${e}`, "error");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setIsImporting(true);
+    try {
+      const count = await importHistory();
+      if (count > 0) {
+        addToast(`已导入 ${count} 条新记录`);
+      } else {
+        addToast("没有新记录需要导入", "info");
+      }
+    } catch (e) {
+      addToast(`导入失败: ${e}`, "error");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   if (isLoading) {
@@ -90,6 +124,34 @@ export function SettingsView() {
           </SettingGroup>
 
           <SettingGroup title="数据">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <div className="text-[13px] text-text-primary">导出历史记录</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">导出所有记录为 JSON 文件</div>
+              </div>
+              <button
+                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-accent bg-accent-muted hover:bg-accent/20 disabled:opacity-50"
+                disabled={isExporting}
+                onClick={handleExport}
+              >
+                <Download className="w-3.5 h-3.5" />
+                {isExporting ? "导出中…" : "导出"}
+              </button>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <div className="text-[13px] text-text-primary">导入历史记录</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">从 JSON 文件导入，自动跳过重复</div>
+              </div>
+              <button
+                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-accent bg-accent-muted hover:bg-accent/20 disabled:opacity-50"
+                disabled={isImporting}
+                onClick={handleImport}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {isImporting ? "导入中…" : "导入"}
+              </button>
+            </div>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <div className="text-[13px] text-text-primary">清空剪贴板历史</div>
