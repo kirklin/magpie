@@ -65,7 +65,7 @@ pub fn run() {
 
     builder.init();
 
-    tauri::Builder::default()
+    let mut app = tauri::Builder::default()
         // --- Plugins ---
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -136,6 +136,13 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // Disable App Nap — macOS suspends Accessory apps when the window
+            // is hidden, which kills our clipboard monitor timer.
+            #[cfg(target_os = "macos")]
+            {
+                disable_app_nap();
+            }
+
             // Create system tray
             tray::create_tray(&handle)
                 .expect("Failed to create system tray");
@@ -187,15 +194,6 @@ pub fn run() {
 
             // Configure main window
             if let Some(window) = app.get_webview_window("main") {
-                #[cfg(target_os = "macos")]
-                {
-                    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-                    // Disable App Nap — macOS suspends Accessory apps when the window
-                    // is hidden, which kills our clipboard monitor timer.
-                    disable_app_nap();
-                }
-
                 let _ = window.set_decorations(false);
                 let _ = window.set_always_on_top(true);
 
@@ -259,8 +257,17 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Set Accessory activation policy AFTER build but BEFORE run.
+    // This sets the policy on TAO's EventLoop aux state so that when
+    // applicationDidFinishLaunching fires, TAO applies Accessory
+    // (not Regular), and the Dock icon never appears at all.
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    app.run(|_, _| {});
 }
 
 /// Toggle the main window visibility
@@ -284,9 +291,8 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
                 let _ = window.emit("active-app-changed", "Active App");
             }
 
-            // Bring app to front first
-            let _ = handle.show();
-            // Then show window
+            // Show and focus window — do NOT call handle.show() as it
+            // resets activation policy to Regular, causing a Dock icon flash.
             let _ = window.center();
             let _ = window.show();
             let _ = window.set_focus();
@@ -311,7 +317,6 @@ pub fn show_window(handle: &tauri::AppHandle) {
             let _ = window.emit("active-app-changed", "Active App");
         }
 
-        let _ = handle.show();
         let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
