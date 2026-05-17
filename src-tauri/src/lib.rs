@@ -4,10 +4,18 @@ mod database;
 mod menu;
 mod tray;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use clipboard::monitor::ClipboardMonitorState;
 use database::repository::get_migrations;
 use tauri::{Manager, Emitter};
+
+/// Stores the bundle ID of the app that was active before Magpie was shown.
+pub struct PreviousAppBundleId(pub Mutex<Option<String>>);
+
+/// When true, the blur handler will NOT auto-hide the window.
+/// Used by paste_and_keep_window to prevent hide during focus switch.
+pub struct SkipBlurHide(pub AtomicBool);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -81,6 +89,8 @@ pub fn run() {
         // --- State ---
         .manage(Arc::new(ClipboardMonitorState::default()))
         .manage(commands::system::AppIconCache::default())
+        .manage(PreviousAppBundleId(Mutex::new(None)))
+        .manage(SkipBlurHide(AtomicBool::new(false)))
         // --- Commands ---
         .invoke_handler(tauri::generate_handler![
             // Clipboard commands
@@ -94,6 +104,10 @@ pub fn run() {
             commands::clipboard::paste_as_plain_text,
             commands::clipboard::paste_file_entry,
             commands::clipboard::copy_file_entry,
+            commands::clipboard::update_entry_content,
+            commands::clipboard::append_to_clipboard,
+            commands::clipboard::save_entry_as_file,
+            commands::clipboard::paste_and_keep_window,
             // Snippet commands
             commands::snippet::get_snippets,
             commands::snippet::create_snippet,
@@ -155,11 +169,15 @@ pub fn run() {
                 let _ = window.set_decorations(false);
                 let _ = window.set_always_on_top(true);
 
-                // Auto-hide on blur (lose focus)
+                // Auto-hide on blur (lose focus), unless SkipBlurHide is set
                 let window_clone = window.clone();
+                let handle_for_blur = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(false) = event {
-                        // Only hide if the window is currently visible
+                        let skip = handle_for_blur.state::<SkipBlurHide>();
+                        if skip.0.load(Ordering::Relaxed) {
+                            return; // Don't hide during paste-and-keep-window
+                        }
                         if window_clone.is_visible().unwrap_or(false) {
                             let _ = window_clone.hide();
                         }
@@ -203,7 +221,14 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
             let _ = window.hide();
         } else {
             // Get previous active app before showing Magpie
-            let (_, name) = clipboard::paste::get_frontmost_app(handle);
+            let (bundle_id, name) = clipboard::paste::get_frontmost_app(handle);
+
+            // Save the bundle_id for paste-and-keep-window
+            if let Some(ref bid) = bundle_id {
+                let state = handle.state::<PreviousAppBundleId>();
+                *state.0.lock().unwrap() = Some(bid.clone());
+            }
+
             if let Some(app_name) = name {
                 let _ = window.emit("active-app-changed", app_name);
             } else {
@@ -223,7 +248,14 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
 /// Show and focus the main window
 pub fn show_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
-        let (_, name) = clipboard::paste::get_frontmost_app(handle);
+        let (bundle_id, name) = clipboard::paste::get_frontmost_app(handle);
+
+        // Save the bundle_id for paste-and-keep-window
+        if let Some(ref bid) = bundle_id {
+            let state = handle.state::<PreviousAppBundleId>();
+            *state.0.lock().unwrap() = Some(bid.clone());
+        }
+
         if let Some(app_name) = name {
             let _ = window.emit("active-app-changed", app_name);
         } else {

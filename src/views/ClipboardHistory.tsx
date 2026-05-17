@@ -3,8 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
+import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
+import { EditContentModal } from "../components/EditContentModal";
 import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
@@ -27,17 +28,21 @@ export function ClipboardHistory() {
     copyFileEntry,
     deleteEntry,
     togglePin,
-    renameEntry,
     clearHistory,
     activeFilter,
     setActiveFilter,
     addNewEntry,
     activeApp,
     setActiveApp,
+    updateEntryContent,
+    appendToClipboard,
+    saveAsFile,
+    pasteAndKeepWindow,
   } = useClipboardStore();
   const { navigateTo } = useNavigationStore();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const isComposingRef = useRef(false);
 
   const deferredSearch = useDeferredValue(searchQuery);
@@ -74,11 +79,10 @@ export function ClipboardHistory() {
     };
   }, [addNewEntry, setActiveApp]);
 
-  // Paste helper - handles both text and file entries
+  // --- Action callbacks ---
+
   const handlePaste = useCallback(async () => {
-    if (!selectedEntry) {
-      return;
-    }
+    if (!selectedEntry) return;
     if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
       pasteFileEntry(selectedEntry.file_paths);
     } else if (selectedEntry.text_content) {
@@ -86,13 +90,81 @@ export function ClipboardHistory() {
     }
   }, [selectedEntry, pasteEntry, pasteFileEntry]);
 
-  // Keyboard navigation
+  const handleCopy = useCallback(() => {
+    if (!selectedEntry) return;
+    if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+      copyFileEntry(selectedEntry.file_paths);
+    } else if (selectedEntry.text_content) {
+      copyEntry(selectedEntry.text_content);
+    }
+  }, [selectedEntry, copyEntry, copyFileEntry]);
+
+  const handlePastePlainText = useCallback(async () => {
+    if (!selectedEntry?.text_content) return;
+    pasteAsPlainText(selectedEntry.text_content);
+  }, [selectedEntry, pasteAsPlainText]);
+
+  const handlePasteKeepWindow = useCallback(async () => {
+    if (!selectedEntry) return;
+    if (selectedEntry.text_content) {
+      pasteAndKeepWindow(selectedEntry.text_content);
+    }
+  }, [selectedEntry, pasteAndKeepWindow]);
+
+  const handleOpenUrl = useCallback(() => {
+    if (!selectedEntry?.text_content) return;
+    window.open(selectedEntry.text_content, "_blank");
+  }, [selectedEntry]);
+
+  const handleAppendToClipboard = useCallback(() => {
+    if (!selectedEntry?.text_content) return;
+    appendToClipboard(selectedEntry.text_content);
+  }, [selectedEntry, appendToClipboard]);
+
+  const handleEditContent = useCallback(() => {
+    if (!selectedEntry?.text_content) return;
+    setIsEditModalOpen(true);
+  }, [selectedEntry]);
+
+  const handleSaveEditContent = useCallback((content: string) => {
+    if (!selectedId) return;
+    updateEntryContent(selectedId, content);
+  }, [selectedId, updateEntryContent]);
+
+  const handleTogglePin = useCallback(() => {
+    if (selectedId) togglePin(selectedId);
+  }, [selectedId, togglePin]);
+
+  const handleSaveAsFile = useCallback(() => {
+    if (!selectedEntry) return;
+    const content = selectedEntry.text_content ?? "";
+    // Derive a default filename from the content type
+    const ext = selectedEntry.content_type === "code" ? "txt"
+      : selectedEntry.content_type === "url" ? "url"
+        : "txt";
+    const preview = (selectedEntry.content_preview ?? "clipboard")
+      .slice(0, 30)
+      .replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_");
+    const defaultName = `${preview}.${ext}`;
+    saveAsFile(content, defaultName);
+  }, [selectedEntry, saveAsFile]);
+
+  const handleDelete = useCallback(() => {
+    if (selectedId) deleteEntry(selectedId);
+  }, [selectedId, deleteEntry]);
+
+  const handleClearHistory = useCallback(() => {
+    if (window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
+      clearHistory();
+    }
+  }, [clearHistory]);
+
+  // --- Keyboard navigation ---
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Don't handle when action panel is open
-      if (isActionPanelOpen) {
-        return;
-      }
+      // Don't handle when modals are open
+      if (isActionPanelOpen || isEditModalOpen) return;
 
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
@@ -115,21 +187,67 @@ export function ClipboardHistory() {
           break;
         }
         case "Enter": {
-          e.preventDefault();
-          handlePaste();
+          if (e.shiftKey) {
+            // Shift+Enter → Paste as plain text
+            e.preventDefault();
+            handlePastePlainText();
+          } else if (e.altKey) {
+            // Alt+Enter → Paste and keep window
+            e.preventDefault();
+            handlePasteKeepWindow();
+          } else if (e.metaKey) {
+            // Cmd+Enter → Copy to clipboard
+            e.preventDefault();
+            handleCopy();
+          } else {
+            // Enter → Paste
+            e.preventDefault();
+            handlePaste();
+          }
           break;
         }
         case "Backspace": {
-          if (e.metaKey && selectedId) {
+          if (e.metaKey && e.shiftKey) {
             e.preventDefault();
-            deleteEntry(selectedId);
+            handleClearHistory();
+          } else if (e.metaKey && selectedId) {
+            e.preventDefault();
+            handleDelete();
           }
           break;
         }
         case ".": {
           if (e.metaKey && selectedId) {
             e.preventDefault();
-            togglePin(selectedId);
+            handleTogglePin();
+          }
+          break;
+        }
+        case "e": {
+          if (e.metaKey && selectedEntry?.text_content) {
+            e.preventDefault();
+            handleEditContent();
+          }
+          break;
+        }
+        case "o": {
+          if (e.metaKey && selectedEntry?.content_type === "url") {
+            e.preventDefault();
+            handleOpenUrl();
+          }
+          break;
+        }
+        case "c": {
+          if (e.metaKey && e.altKey && selectedEntry?.text_content) {
+            e.preventDefault();
+            handleAppendToClipboard();
+          }
+          break;
+        }
+        case "s": {
+          if (e.metaKey && selectedEntry) {
+            e.preventDefault();
+            handleSaveAsFile();
           }
           break;
         }
@@ -154,7 +272,12 @@ export function ClipboardHistory() {
         }
       }
     },
-    [entries, selectedId, selectedEntry, isActionPanelOpen, setSelectedId, handlePaste, deleteEntry, togglePin],
+    [
+      entries, selectedId, selectedEntry, isActionPanelOpen, isEditModalOpen,
+      setSelectedId, handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
+      handleDelete, handleTogglePin, handleEditContent, handleOpenUrl,
+      handleAppendToClipboard, handleSaveAsFile, handleClearHistory, navigateTo,
+    ],
   );
 
   useEffect(() => {
@@ -169,59 +292,32 @@ export function ClipboardHistory() {
     }
   }, [entries, selectedId, setSelectedId]);
 
-  // Build actions for selected entry
-  const actions = useMemo(() => buildClipboardActions({
+  // Build grouped actions for the action panel
+  const actionGroups = useMemo(() => buildClipboardActionGroups({
     hasEntry: !!selectedEntry,
-    isPinned: selectedEntry?.is_pinned ?? false,
+    entry: selectedEntry ? {
+      content_type: selectedEntry.content_type,
+      text_content: selectedEntry.text_content,
+      is_pinned: selectedEntry.is_pinned,
+    } : null,
     activeApp,
     onPaste: handlePaste,
-    onPastePlain: async () => {
-      if (!selectedEntry) {
-        return;
-      }
-      if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-        pasteFileEntry(selectedEntry.file_paths);
-      } else if (selectedEntry.text_content) {
-        pasteAsPlainText(selectedEntry.text_content);
-      }
-    },
-    onCopy: () => {
-      if (!selectedEntry) {
-        return;
-      }
-      if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-        copyFileEntry(selectedEntry.file_paths);
-      } else if (selectedEntry.text_content) {
-        copyEntry(selectedEntry.text_content);
-      }
-    },
-    onTogglePin: () => {
-      if (selectedId) {
-        togglePin(selectedId);
-      }
-    },
-    onDelete: () => {
-      if (selectedId) {
-        deleteEntry(selectedId);
-      }
-    },
-    onRename: () => {
-      if (selectedId) {
-        const name = window.prompt("Enter new name:", selectedEntry?.custom_name || "");
-        if (name !== null) {
-          renameEntry(selectedId, name);
-        }
-      }
-    },
-    onSaveSnippet: () => {
-      // TODO: open snippet save dialog
-    },
-    onClearHistory: () => {
-      if (window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
-        clearHistory();
-      }
-    },
-  }), [selectedEntry, selectedId, activeApp, handlePaste, pasteAsPlainText, copyEntry, togglePin, deleteEntry, renameEntry, clearHistory]);
+    onCopy: handleCopy,
+    onPastePlainText: handlePastePlainText,
+    onPasteKeepWindow: handlePasteKeepWindow,
+    onOpenUrl: handleOpenUrl,
+    onAppendToClipboard: handleAppendToClipboard,
+    onEditContent: handleEditContent,
+    onTogglePin: handleTogglePin,
+    onSaveAsFile: handleSaveAsFile,
+    onDelete: handleDelete,
+    onClearHistory: handleClearHistory,
+  }), [
+    selectedEntry, activeApp,
+    handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
+    handleOpenUrl, handleAppendToClipboard, handleEditContent,
+    handleTogglePin, handleSaveAsFile, handleDelete, handleClearHistory,
+  ]);
 
   return (
     <div className="flex flex-col h-full">
@@ -327,7 +423,15 @@ export function ClipboardHistory() {
       <ActionPanel
         isOpen={isActionPanelOpen}
         onClose={() => setIsActionPanelOpen(false)}
-        actions={actions}
+        groups={actionGroups}
+      />
+
+      {/* Edit Content Modal */}
+      <EditContentModal
+        isOpen={isEditModalOpen}
+        initialContent={selectedEntry?.text_content ?? ""}
+        onSave={handleSaveEditContent}
+        onClose={() => setIsEditModalOpen(false)}
       />
     </div>
   );

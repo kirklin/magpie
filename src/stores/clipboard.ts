@@ -44,13 +44,16 @@ interface ClipboardStore {
   fetchEntries: () => Promise<void>;
   deleteEntry: (id: number) => Promise<void>;
   togglePin: (id: number) => Promise<void>;
-  renameEntry: (id: number, name: string) => Promise<void>;
   clearHistory: () => Promise<void>;
   pasteEntry: (text: string) => Promise<void>;
   copyEntry: (text: string) => Promise<void>;
   pasteAsPlainText: (text: string) => Promise<void>;
   pasteFileEntry: (filePathsJson: string) => Promise<void>;
   copyFileEntry: (filePathsJson: string) => Promise<void>;
+  updateEntryContent: (id: number, content: string) => Promise<void>;
+  appendToClipboard: (text: string) => Promise<void>;
+  saveAsFile: (content: string, defaultName: string) => Promise<boolean>;
+  pasteAndKeepWindow: (text: string) => Promise<void>;
   addNewEntry: (entry: ClipboardEntry) => void;
 }
 
@@ -127,16 +130,42 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     }
   },
 
-  renameEntry: async (id, name) => {
+  updateEntryContent: async (id, content) => {
     try {
-      await invoke("rename_clipboard_entry", { id, name });
+      await invoke("update_entry_content", { id, content });
+      const preview = content.replace(/\n/g, " ").slice(0, 200);
       set(state => ({
         entries: state.entries.map(e =>
-          e.id === id ? { ...e, custom_name: name } : e,
+          e.id === id ? { ...e, text_content: content, content_preview: preview } : e,
         ),
       }));
     } catch (e) {
-      console.error("Failed to rename entry:", e);
+      console.error("Failed to update entry content:", e);
+    }
+  },
+
+  appendToClipboard: async (text) => {
+    try {
+      await invoke("append_to_clipboard", { text });
+    } catch (e) {
+      console.error("Failed to append to clipboard:", e);
+    }
+  },
+
+  saveAsFile: async (content, defaultName) => {
+    try {
+      return await invoke<boolean>("save_entry_as_file", { content, defaultName });
+    } catch (e) {
+      console.error("Failed to save as file:", e);
+      return false;
+    }
+  },
+
+  pasteAndKeepWindow: async (text) => {
+    try {
+      await invoke("paste_and_keep_window", { text });
+    } catch (e) {
+      console.error("Failed to paste and keep window:", e);
     }
   },
 
