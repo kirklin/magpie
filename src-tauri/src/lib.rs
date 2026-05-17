@@ -126,6 +126,7 @@ pub fn run() {
             // Settings commands
             commands::settings::get_default_settings,
             commands::settings::update_global_shortcut,
+            commands::settings::set_tray_visible,
             // System commands
             commands::system::get_app_icon,
             commands::system::get_file_icon,
@@ -138,6 +139,28 @@ pub fn run() {
             // Create system tray
             tray::create_tray(&handle)
                 .expect("Failed to create system tray");
+
+            // Apply persisted tray icon visibility setting
+            {
+                let app_dir = app.path().app_data_dir().ok();
+                if let Some(dir) = app_dir {
+                    let store_path = dir.join("settings.json");
+                    if store_path.exists() {
+                        if let Ok(contents) = std::fs::read_to_string(&store_path) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                                if let Some(visible) = json.get("show_menu_bar_icon").and_then(|v| v.as_bool()) {
+                                    if !visible {
+                                        if let Some(tray) = handle.tray_by_id("main-tray") {
+                                            let _ = tray.set_visible(false);
+                                            log::info!("Menu bar icon hidden per saved setting");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Create standard macOS application menu bar
             // Provides ⌘, ⌘Q, ⌘H, ⌘W and standard Edit menu shortcuts

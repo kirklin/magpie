@@ -120,6 +120,12 @@ export function SettingsView() {
               label="开机自启"
               onChange={handleAutostartChange}
             />
+            <SettingToggle
+              checked={settings.show_menu_bar_icon}
+              description="关闭后需要通过快捷键唤起应用"
+              label="显示菜单栏图标"
+              onChange={val => updateSetting("show_menu_bar_icon", val)}
+            />
             <SettingSelect
               label="默认双击操作"
               options={[

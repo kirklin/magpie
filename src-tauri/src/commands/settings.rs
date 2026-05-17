@@ -5,6 +5,20 @@ pub fn get_default_settings() -> AppSettings {
     AppSettings::default()
 }
 
+/// Show or hide the menu bar tray icon at runtime.
+#[tauri::command]
+pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(tray) = app_handle.tray_by_id("main-tray") {
+        tray.set_visible(visible)
+            .map_err(|e| format!("Failed to set tray visible: {}", e))?;
+        log::info!("Menu bar icon visibility set to: {}", visible);
+        Ok(())
+    } else {
+        Err("Tray icon not found".to_string())
+    }
+}
+
 /// Re-register the global shortcut at runtime.
 /// Unregisters all existing shortcuts first, then registers the new one.
 #[tauri::command]

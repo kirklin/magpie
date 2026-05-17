@@ -123,6 +123,7 @@ pub struct AppSettings {
     pub theme: String,                  // "system", "dark", "light"
     pub launch_at_login: bool,
     pub move_to_top_on_use: bool,
+    pub show_menu_bar_icon: bool,       // show/hide menu bar tray icon
 }
 
 impl Default for AppSettings {
@@ -137,6 +138,7 @@ impl Default for AppSettings {
             theme: "system".to_string(),
             launch_at_login: false,
             move_to_top_on_use: true,
+            show_menu_bar_icon: true,
         }
     }
 }

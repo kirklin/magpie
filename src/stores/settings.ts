@@ -24,6 +24,7 @@ export interface AppSettings {
   theme: ThemeMode;
   global_shortcut: string;
   accent_color: AccentColorId;
+  show_menu_bar_icon: boolean;
 }
 
 interface SettingsStore {
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   global_shortcut: "CmdOrCtrl+Shift+V",
   accent_color: "blue",
+  show_menu_bar_icon: true,
 };
 
 let storeInstance: Store | null = null;
@@ -155,6 +157,10 @@ export const useSettingsStore = create<SettingsStore>(set => ({
 
       if (key === "global_shortcut") {
         await invoke("update_global_shortcut", { shortcut: value });
+      }
+
+      if (key === "show_menu_bar_icon") {
+        await invoke("set_tray_visible", { visible: value });
       }
     } catch (err) {
       console.error(`Failed to update setting ${key}:`, err);
