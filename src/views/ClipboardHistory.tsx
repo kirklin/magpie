@@ -1,7 +1,7 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Settings } from "lucide-react";
+import { Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
@@ -244,7 +244,8 @@ export function ClipboardHistory() {
                 <div className="py-1">
                   {Array.from(groupedEntries.entries()).map(([dateLabel, groupEntries]) => (
                     <div key={dateLabel}>
-                      <div className="px-4 pt-3 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                      <div className="px-4 pt-3 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+                        {dateLabel === "Pinned" && <Pin size={10} className="shrink-0" />}
                         {dateLabel}
                       </div>
                       {(groupEntries as ClipboardEntry[]).map(entry => (

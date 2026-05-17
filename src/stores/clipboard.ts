@@ -110,11 +110,17 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   togglePin: async (id) => {
     try {
       const isPinned = await invoke<boolean>("toggle_pin_entry", { id });
-      set(state => ({
-        entries: state.entries.map(e =>
+      set(state => {
+        const newEntries = state.entries.map(e =>
           e.id === id ? { ...e, is_pinned: isPinned } : e,
-        ),
-      }));
+        );
+        // Re-sort: pinned first, then by accessed_at descending
+        newEntries.sort((a, b) => {
+          if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+          return (b.accessed_at ?? "").localeCompare(a.accessed_at ?? "");
+        });
+        return { entries: newEntries };
+      });
     } catch (e) {
       console.error("Failed to toggle pin:", e);
     }
@@ -187,17 +193,22 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
   addNewEntry: (entry) => {
     set((state) => {
-      // Check if already exists (dedup)
+      let newEntries: ClipboardEntry[];
       const existingIndex = state.entries.findIndex(e => e.id === entry.id);
       if (existingIndex !== -1) {
-        // Move to top and update
-        const newEntries = [...state.entries];
-        newEntries.splice(existingIndex, 1);
-        return {
-          entries: [{ ...state.entries[existingIndex], ...entry }, ...newEntries],
-        };
+        // Merge with existing entry to preserve fields not in the event payload
+        const merged = { ...state.entries[existingIndex], ...entry };
+        newEntries = [...state.entries];
+        newEntries[existingIndex] = merged;
+      } else {
+        newEntries = [entry, ...state.entries];
       }
-      return { entries: [entry, ...state.entries] };
+      // Re-sort: pinned first, then by accessed_at descending
+      newEntries.sort((a, b) => {
+        if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+        return (b.accessed_at ?? "").localeCompare(a.accessed_at ?? "");
+      });
+      return { entries: newEntries };
     });
   },
 }));

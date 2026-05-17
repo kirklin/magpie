@@ -352,18 +352,18 @@ async fn store_file_entry(
     let instances = db_instances.0.read().await;
 
     if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, final_source_app, final_source_app_name) = match db {
+        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
             DbPool::Sqlite(pool) => {
                 // Check for duplicate hash first
-                let existing: Option<(i64, String, i64, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
                 )
                 .bind(&hash)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
+                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
                     sqlx::query(
                         "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
                     )
@@ -374,7 +374,7 @@ async fn store_file_entry(
                     .await
                     .map_err(|e| e.to_string())?;
 
-                    (existing_id, created_at, access_count + 1, ext_source_app, ext_source_app_name)
+                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
                 } else {
                     let result = sqlx::query(
                         "INSERT INTO clipboard_entries (content_type, text_content, file_paths, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
@@ -393,7 +393,7 @@ async fn store_file_entry(
                     .await
                     .map_err(|e| e.to_string())?;
 
-                    (result.last_insert_rowid(), now.clone(), 1, source_app, source_app_name)
+                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
                 }
             }
             #[allow(unreachable_patterns)]
@@ -409,7 +409,7 @@ async fn store_file_entry(
             file_paths: Some(file_paths_json),
             source_app: final_source_app,
             source_app_name: final_source_app_name,
-            is_pinned: false,
+            is_pinned,
             created_at,
             accessed_at: now,
             access_count,
@@ -446,18 +446,18 @@ async fn store_text_entry(
     let instances = db_instances.0.read().await;
 
     if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, final_source_app, final_source_app_name) = match db {
+        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
             DbPool::Sqlite(pool) => {
                 // Check for duplicate hash first
-                let existing: Option<(i64, String, i64, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
                 )
                 .bind(&hash)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
+                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
                     // Update accessed_at and access_count
                     sqlx::query(
                         "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
@@ -469,7 +469,7 @@ async fn store_text_entry(
                     .await
                     .map_err(|e| e.to_string())?;
                     
-                    (existing_id, created_at, access_count + 1, ext_source_app, ext_source_app_name)
+                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
                 } else {
                     let result = sqlx::query(
                         "INSERT INTO clipboard_entries (content_type, text_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
@@ -487,7 +487,7 @@ async fn store_text_entry(
                     .await
                     .map_err(|e| e.to_string())?;
                     
-                    (result.last_insert_rowid(), now.clone(), 1, source_app, source_app_name)
+                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
                 }
             }
             #[allow(unreachable_patterns)]
@@ -503,7 +503,7 @@ async fn store_text_entry(
             file_paths: None,
             source_app: final_source_app,
             source_app_name: final_source_app_name,
-            is_pinned: false,
+            is_pinned,
             created_at,
             accessed_at: now,
             access_count,
@@ -557,18 +557,18 @@ async fn store_image_entry(
     let instances = db_instances.0.read().await;
 
     if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, final_source_app, final_source_app_name) = match db {
+        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
             DbPool::Sqlite(pool) => {
                 // Check for duplicate hash
-                let existing: Option<(i64, String, i64, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
+                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
+                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
                 )
                 .bind(&hash)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                if let Some((existing_id, created_at, access_count, ext_source_app, ext_source_app_name)) = existing {
+                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
                     sqlx::query(
                         "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
                     )
@@ -579,7 +579,7 @@ async fn store_image_entry(
                     .await
                     .map_err(|e| e.to_string())?;
                     
-                    (existing_id, created_at, access_count + 1, ext_source_app, ext_source_app_name)
+                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
                 } else {
                     let result = sqlx::query(
                         "INSERT INTO clipboard_entries (content_type, image_path, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
@@ -597,7 +597,7 @@ async fn store_image_entry(
                     .await
                     .map_err(|e| e.to_string())?;
                     
-                    (result.last_insert_rowid(), now.clone(), 1, source_app, source_app_name)
+                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
                 }
             }
             #[allow(unreachable_patterns)]
@@ -613,7 +613,7 @@ async fn store_image_entry(
             file_paths: None,
             source_app: final_source_app,
             source_app_name: final_source_app_name,
-            is_pinned: false,
+            is_pinned,
             created_at,
             accessed_at: now,
             access_count,
