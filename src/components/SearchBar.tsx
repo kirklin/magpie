@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Code, FileText, Image, Layers, Link, Mail, Palette, Search, Type } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 interface SearchBarProps {
@@ -14,15 +14,15 @@ export interface SearchBarRef {
   toggleFilter: () => void;
 }
 
-const FILTER_OPTIONS = [
-  { value: null, label: "All Types" },
-  { value: "text", label: "Text Only" },
-  { value: "image", label: "Images Only" },
-  { value: "file", label: "Files Only" },
-  { value: "url", label: "Links Only" },
-  { value: "color", label: "Colors Only" },
-  { value: "code", label: "Code Only" },
-  { value: "email", label: "Emails Only" },
+const FILTER_OPTIONS: { value: string | null; label: string; icon: React.ReactNode }[] = [
+  { value: null, label: "All Types", icon: <Layers size={14} /> },
+  { value: "text", label: "Text", icon: <Type size={14} /> },
+  { value: "image", label: "Images", icon: <Image size={14} /> },
+  { value: "file", label: "Files", icon: <FileText size={14} /> },
+  { value: "url", label: "Links", icon: <Link size={14} /> },
+  { value: "color", label: "Colors", icon: <Palette size={14} /> },
+  { value: "code", label: "Code", icon: <Code size={14} /> },
+  { value: "email", label: "Emails", icon: <Mail size={14} /> },
 ];
 
 export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
@@ -163,7 +163,10 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
                     }}
                     onMouseEnter={() => setHighlightedIndex(index)}
                   >
-                    {option.label}
+                    <span className="flex items-center gap-2.5">
+                      <span className={index === highlightedIndex ? "text-text-primary" : "text-text-tertiary"}>{option.icon}</span>
+                      {option.label}
+                    </span>
                     {activeFilter === option.value && <Check size={14} className="text-accent" />}
                   </button>
                 ))}
