@@ -60,12 +60,14 @@ function ToastItem({ toast }: { toast: Toast }) {
   const bgColor = toast.type === "error"
     ? "bg-red-500/90"
     : toast.type === "info"
-      ? "bg-white/10"
+      ? "bg-bg-secondary/90"
       : "bg-emerald-500/90";
 
   return (
     <div
-      className={`px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-white shadow-lg backdrop-blur-xl border border-white/10 transition-all duration-200 ${bgColor} ${
+      className={`px-3.5 py-1.5 rounded-lg text-[12px] font-medium shadow-lg backdrop-blur-xl border border-border transition-all duration-200 ${bgColor} ${
+        toast.type === "info" ? "text-text-primary" : "text-white"
+      } ${
         visible
           ? "opacity-100 translate-y-0"
           : "opacity-0 -translate-y-2"

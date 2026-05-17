@@ -71,7 +71,7 @@ function keyEventToShortcut(e: KeyboardEvent): string | null {
 
 function KeyCap({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-[4px] bg-white/10 text-[11px] font-sans font-medium leading-none text-white/80 shadow-[0_1px_0_rgba(0,0,0,0.3)]">
+    <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-[4px] bg-bg-hover text-[11px] font-sans font-medium leading-none text-text-primary shadow-[0_1px_0_rgba(0,0,0,0.15)] border border-border">
       {children}
     </kbd>
   );
@@ -106,11 +106,11 @@ function RecordingPopover({
 
   return createPortal(
     <div ref={popoverRef} className="fixed z-[100]" style={{ top: pos.top, left: pos.left }}>
-      <div className="relative bg-[#1c1f2e] border border-white/12 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.55)] w-[220px] overflow-hidden">
+      <div className="relative bg-bg-secondary border border-border rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.25)] w-[220px] overflow-hidden">
         {/* Close button */}
         <button
           type="button"
-          className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-white/30 hover:text-white/70 hover:bg-white/8 transition-colors"
+          className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover transition-colors"
           onClick={onClose}
         >
           <X size={11} />
@@ -118,14 +118,14 @@ function RecordingPopover({
 
         {/* Example hint */}
         <div className="flex items-center justify-center gap-1.5 px-4 pt-3 pb-1.5">
-          <span className="text-[11px] text-white/30 mr-1">e.g.</span>
+          <span className="text-[11px] text-text-tertiary mr-1">e.g.</span>
           <KeyCap>⇧</KeyCap>
           <KeyCap>⌘</KeyCap>
           <KeyCap>Space</KeyCap>
         </div>
 
         {/* Recording label */}
-        <div className="text-[12px] text-white/50 text-center pb-3">
+        <div className="text-[12px] text-text-secondary text-center pb-3">
           Recording...
         </div>
       </div>
@@ -138,7 +138,7 @@ function RecordingPopover({
           bottom: -6,
           borderLeft: "6px solid transparent",
           borderRight: "6px solid transparent",
-          borderTop: "6px solid #1c1f2e",
+          borderTop: "6px solid var(--color-bg-secondary)",
         }}
       />
     </div>,

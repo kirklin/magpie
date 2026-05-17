@@ -66,23 +66,23 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
       />
 
       {/* Modal */}
-      <div className="fixed inset-4 z-50 flex flex-col bg-[#1E1E1E]/98 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] animate-scale-in overflow-hidden">
+      <div className="fixed inset-4 z-50 flex flex-col bg-bg-secondary/98 backdrop-blur-xl border border-border rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 h-11 border-b border-white/10 shrink-0">
-          <span className="text-[13px] font-medium text-white/90">Edit Content</span>
+        <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
+          <span className="text-[13px] font-medium text-text-primary">Edit Content</span>
           <div className="flex items-center gap-2">
             <button
-              className="px-3 py-1 text-[12px] text-white/60 hover:text-white/90 transition-colors rounded-md hover:bg-white/5"
+              className="px-3 py-1 text-[12px] text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-hover"
               onClick={onClose}
             >
               Cancel
-              <kbd className="ml-1.5 text-[10px] text-white/30">Esc</kbd>
+              <kbd className="ml-1.5 text-[10px] text-text-tertiary">Esc</kbd>
             </button>
             <button
               className={`px-3 py-1 text-[12px] rounded-md transition-colors ${
                 hasChanged
                   ? "bg-accent text-white hover:bg-accent-hover"
-                  : "bg-white/5 text-white/30 cursor-not-allowed"
+                  : "bg-bg-hover text-text-tertiary cursor-not-allowed"
               }`}
               onClick={handleSave}
               disabled={!hasChanged}
@@ -97,7 +97,7 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
         <div className="flex-1 overflow-hidden p-2">
           <textarea
             ref={textareaRef}
-            className="w-full h-full bg-transparent border-none outline-none text-white/90 text-[13px] leading-relaxed font-mono resize-none p-2"
+            className="w-full h-full bg-transparent border-none outline-none text-text-primary text-[13px] leading-relaxed font-mono resize-none p-2"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             spellCheck={false}
@@ -105,8 +105,8 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
         </div>
 
         {/* Footer info */}
-        <div className="flex items-center justify-between px-4 h-8 border-t border-white/10 shrink-0">
-          <span className="text-[11px] text-white/30">
+        <div className="flex items-center justify-between px-4 h-8 border-t border-border shrink-0">
+          <span className="text-[11px] text-text-tertiary">
             {content.length} characters · {content.split("\n").length} lines
           </span>
           {hasChanged && (

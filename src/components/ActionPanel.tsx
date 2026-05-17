@@ -127,14 +127,14 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
       {/* Panel - positioned bottom right above the actions button */}
       <div
         ref={panelRef}
-        className="fixed right-4 bottom-14 w-[340px] bg-[#1E1E1E]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-50 flex flex-col-reverse overflow-hidden animate-scale-in"
+        className="fixed right-4 bottom-14 w-[340px] bg-bg-secondary/95 backdrop-blur-xl border border-border rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] z-50 flex flex-col-reverse overflow-hidden animate-scale-in"
         style={{ transformOrigin: "bottom right" }}
       >
         {/* Search - visually at bottom */}
         <div className="flex items-center px-3 h-11 bg-transparent shrink-0">
           <input
             ref={inputRef}
-            className="flex-1 h-full bg-transparent border-none outline-none text-white/90 text-[13px] placeholder:text-white/40 font-sans"
+            className="flex-1 h-full bg-transparent border-none outline-none text-text-primary text-[13px] placeholder:text-text-tertiary font-sans"
             placeholder="Search actions..."
             value={search}
             onChange={(e) => {
@@ -146,13 +146,13 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
         </div>
 
         {/* Divider */}
-        <div className="h-[1px] bg-white/10 w-full shrink-0" />
+        <div className="h-[1px] bg-border w-full shrink-0" />
 
         {/* Actions list - visually above search */}
         <div className="max-h-[340px] overflow-y-auto p-1.5 flex flex-col scrollbar-none">
           {filtered.length === 0
             ? (
-                <div className="px-4 py-6 text-center text-white/40 text-sm">
+                <div className="px-4 py-6 text-center text-text-tertiary text-sm">
                   No matching actions
                 </div>
               )
@@ -187,7 +187,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                       <div key={group.label ?? groupIdx}>
                         {/* Separator between groups (not before first) */}
                         {groupIdx > 0 && (
-                          <div className="h-[1px] bg-white/8 mx-1.5 my-1" />
+                          <div className="h-[1px] bg-border mx-1.5 my-1" />
                         )}
                         {groupActions.map((action) => {
                           const currentIndex = flatIndex++;
@@ -234,16 +234,16 @@ const ActionButton = forwardRef<
     ref={ref}
     className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors ${
       isSelected
-        ? "bg-white/10"
-        : "hover:bg-white/5"
-    } ${action.danger ? "text-red-400" : "text-white/90"}`}
+        ? "bg-bg-hover"
+        : "hover:bg-bg-hover/50"
+    } ${action.danger ? "text-red-400" : "text-text-primary"}`}
     onClick={onClick}
     onMouseEnter={onSelect}
   >
     <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded ${
       isSelected
-        ? action.danger ? "text-red-400" : "text-white"
-        : "text-white/70"
+        ? action.danger ? "text-red-400" : "text-text-primary"
+        : "text-text-secondary"
     }`}
     >
       {action.icon}
@@ -254,7 +254,7 @@ const ActionButton = forwardRef<
         {action.shortcut.map((key, i) => (
           <kbd
             key={i}
-            className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-white/10 rounded border border-white/10 font-sans shadow-sm"
+            className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-bg-hover rounded border border-border font-sans shadow-sm"
           >
             {key}
           </kbd>
@@ -318,7 +318,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       {
         id: "copy",
         label: "Copy to Clipboard",
-        icon: <Copy size={14} className="text-white/70" />,
+        icon: <Copy size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "↵"],
         onAction: config.onCopy,
       },
@@ -328,7 +328,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       pasteActions.push({
         id: "paste-plain",
         label: "Paste as Plain Text",
-        icon: <Type size={14} className="text-white/70" />,
+        icon: <Type size={14} className="text-text-secondary" />,
         shortcut: ["⇧", "↵"],
         onAction: config.onPastePlainText,
       });
@@ -337,7 +337,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     pasteActions.push({
       id: "paste-keep-window",
       label: "Paste and Keep Window Open",
-      icon: <ClipboardPaste size={14} className="text-white/70" />,
+      icon: <ClipboardPaste size={14} className="text-text-secondary" />,
       shortcut: ["⌥", "↵"],
       onAction: config.onPasteKeepWindow,
     });
@@ -351,7 +351,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       manageActions.push({
         id: "open-url",
         label: "Open in Browser",
-        icon: <ExternalLink size={14} className="text-white/70" />,
+        icon: <ExternalLink size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "O"],
         onAction: config.onOpenUrl,
       });
@@ -361,7 +361,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       manageActions.push({
         id: "append",
         label: "Append to Clipboard",
-        icon: <ListPlus size={14} className="text-white/70" />,
+        icon: <ListPlus size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "⌥", "C"],
         onAction: config.onAppendToClipboard,
       });
@@ -371,7 +371,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       manageActions.push({
         id: "edit-content",
         label: "Edit Content",
-        icon: <Pencil size={14} className="text-white/70" />,
+        icon: <Pencil size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "E"],
         onAction: config.onEditContent,
       });
@@ -380,7 +380,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     manageActions.push({
       id: "pin",
       label: isPinned ? "Unpin" : "Pin to Top",
-      icon: isPinned ? <PinOff size={14} className="text-orange-400" /> : <Pin size={14} className="text-white/70" />,
+      icon: isPinned ? <PinOff size={14} className="text-orange-400" /> : <Pin size={14} className="text-text-secondary" />,
       shortcut: ["⌘", "."],
       onAction: config.onTogglePin,
     });
@@ -388,7 +388,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     manageActions.push({
       id: "save-as-file",
       label: "Save as File...",
-      icon: <FileDown size={14} className="text-white/70" />,
+      icon: <FileDown size={14} className="text-text-secondary" />,
       shortcut: ["⌘", "S"],
       onAction: config.onSaveAsFile,
     });

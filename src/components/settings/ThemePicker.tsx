@@ -63,7 +63,7 @@ export function ThemePicker({ value, onChange }: ThemePickerProps) {
                 className={`w-[76px] h-[50px] rounded-lg p-[3px] transition-all duration-150 ${
                   isActive
                     ? "ring-[1.5px] ring-accent"
-                    : "ring-1 ring-white/10 group-hover:ring-white/20"
+                    : "ring-1 ring-border group-hover:ring-border-focused"
                 }`}
                 style={{
                   background: key === "light"
