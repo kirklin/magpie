@@ -380,7 +380,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     manageActions.push({
       id: "pin",
       label: isPinned ? "Unpin" : "Pin to Top",
-      icon: isPinned ? <PinOff size={14} className="text-orange-400" /> : <Pin size={14} className="text-text-secondary" />,
+      icon: isPinned ? <PinOff size={14} className="text-text-secondary" /> : <Pin size={14} className="text-text-secondary" />,
       shortcut: ["⌘", "."],
       onAction: config.onTogglePin,
     });
