@@ -1,6 +1,7 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AccentColorPicker } from "../components/settings/AccentColorPicker";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
@@ -135,6 +136,10 @@ export function SettingsView() {
               value={settings.theme}
               onChange={val => updateSetting("theme", val)}
             />
+            <AccentColorPicker
+              value={settings.accent_color}
+              onChange={val => updateSetting("accent_color", val)}
+            />
           </SettingGroup>
 
           <SettingGroup title="快捷键">
@@ -153,7 +158,7 @@ export function SettingsView() {
                 <div className="text-[11px] text-text-tertiary mt-0.5">导出所有记录为 JSON 文件</div>
               </div>
               <button
-                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-accent bg-accent-muted hover:bg-accent/20 disabled:opacity-50"
+                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-text-secondary bg-bg-hover hover:bg-bg-active hover:text-text-primary disabled:opacity-50"
                 disabled={isExporting}
                 onClick={handleExport}
               >
@@ -167,7 +172,7 @@ export function SettingsView() {
                 <div className="text-[11px] text-text-tertiary mt-0.5">从 JSON 文件导入，自动跳过重复</div>
               </div>
               <button
-                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-accent bg-accent-muted hover:bg-accent/20 disabled:opacity-50"
+                className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-text-secondary bg-bg-hover hover:bg-bg-active hover:text-text-primary disabled:opacity-50"
                 disabled={isImporting}
                 onClick={handleImport}
               >
