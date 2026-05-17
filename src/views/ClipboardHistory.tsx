@@ -1,7 +1,8 @@
 import type { ClipboardEntry } from "../stores/clipboard";
+import type { SearchBarRef } from "../components/SearchBar";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Pin, Settings } from "lucide-react";
+import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
@@ -53,6 +54,7 @@ export function ClipboardHistory() {
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchBarRef = useRef<SearchBarRef>(null);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -298,6 +300,13 @@ export function ClipboardHistory() {
           }
           break;
         }
+        case "f": {
+          if (e.metaKey) {
+            e.preventDefault();
+            searchBarRef.current?.toggleFilter();
+          }
+          break;
+        }
         case "Escape": {
           e.preventDefault();
           invoke("hide_window");
@@ -362,6 +371,7 @@ export function ClipboardHistory() {
   return (
     <div className="flex flex-col h-full">
       <SearchBar
+        ref={searchBarRef}
         value={searchQuery}
         onChange={setSearchQuery}
         onCompositionChange={(composing) => {
@@ -449,6 +459,16 @@ export function ClipboardHistory() {
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">K</kbd>
             </div>
+          </button>
+          <div className="w-[1px] h-3.5 bg-border mx-1"></div>
+          <button
+            className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors"
+            onClick={() => searchBarRef.current?.toggleFilter()}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filter
+            <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
+            <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">F</kbd>
           </button>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>
           <button
