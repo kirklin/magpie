@@ -164,3 +164,4 @@ logs
 ######################
 /coverage/
 /.nyc_output/
+*.p12
