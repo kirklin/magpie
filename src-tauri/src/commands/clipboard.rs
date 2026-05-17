@@ -537,6 +537,53 @@ pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: Stri
     Ok(())
 }
 
+/// Paste file entries while keeping the Magpie window visible.
+#[tauri::command]
+pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
+        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+
+    // 1. Write file URLs to pasteboard
+    #[cfg(target_os = "macos")]
+    {
+        write_files_to_pasteboard(&file_paths)?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        app_handle
+            .clipboard()
+            .write_text(&file_paths.join("\n"))
+            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    }
+
+    // 2. Activate target app, paste, re-focus
+    let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
+    let bundle_id = prev_state.0.lock().unwrap().clone();
+    let Some(target_bundle_id) = bundle_id else {
+        return Err("No previous app to paste to".to_string());
+    };
+
+    let skip = app_handle.state::<crate::SkipBlurHide>();
+    skip.0.store(true, Ordering::Relaxed);
+
+    activate_app_by_bundle_id(&app_handle, &target_bundle_id);
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    paste::paste_to_active_app(&app_handle, "", false)?;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+
+    skip.0.store(false, Ordering::Relaxed);
+
+    Ok(())
+}
+
 /// Activate a macOS application by its bundle identifier.
 /// Uses NSRunningApplication to bring the app to the foreground.
 #[cfg(target_os = "macos")]

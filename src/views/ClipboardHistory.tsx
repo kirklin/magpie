@@ -43,6 +43,7 @@ export function ClipboardHistory() {
     saveAsFile,
     pasteAndKeepWindow,
     pasteImageAndKeepWindow,
+    pasteFileAndKeepWindow,
   } = useClipboardStore();
   const { navigateTo } = useNavigationStore();
   const toast = useToastStore();
@@ -122,11 +123,14 @@ export function ClipboardHistory() {
     if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
       pasteImageAndKeepWindow(selectedEntry.image_path);
       toast.add("Pasted (window kept open)");
+    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+      pasteFileAndKeepWindow(selectedEntry.file_paths);
+      toast.add("Pasted (window kept open)");
     } else if (selectedEntry.text_content) {
       pasteAndKeepWindow(selectedEntry.text_content);
       toast.add("Pasted (window kept open)");
     }
-  }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, toast]);
+  }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast]);
 
   const handleOpenUrl = useCallback(() => {
     if (!selectedEntry?.text_content) return;
