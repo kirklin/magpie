@@ -1,5 +1,6 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { Pin } from "lucide-react";
 import Prism from "prismjs";
 import React, { useEffect, useState } from "react";
 import { getTypeLabel } from "../utils/classifier";
@@ -449,7 +450,17 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
             : (
                 <InfoRow label="Copied" value={formatCopiedTime(entry.created_at)} />
               )}
-          {entry.is_pinned && <InfoRow label="Status" value="📌 Pinned" />}
+          {entry.is_pinned && (
+            <InfoRow
+              label="Status"
+              value={
+                <span className="inline-flex items-center gap-1 text-text-secondary">
+                  <Pin size={12} className="shrink-0" />
+                  Pinned
+                </span>
+              }
+            />
+          )}
         </div>
       </div>
     </div>

@@ -118,7 +118,7 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
       </div>
 
       {entry.is_pinned && (
-        <Pin size={12} className="shrink-0 opacity-60" />
+        <Pin size={12} className="shrink-0 text-text-tertiary" />
       )}
     </div>
   );
