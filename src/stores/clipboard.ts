@@ -102,10 +102,23 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   deleteEntry: async (id) => {
     try {
       await invoke("delete_clipboard_entry", { id });
-      set(state => ({
-        entries: state.entries.filter(e => e.id !== id),
-        selectedId: state.selectedId === id ? null : state.selectedId,
-      }));
+      set((state) => {
+        const oldEntries = state.entries;
+        const idx = oldEntries.findIndex(e => e.id === id);
+        const newEntries = oldEntries.filter(e => e.id !== id);
+
+        // Auto-select next item (or previous if deleted the last one)
+        let newSelectedId = state.selectedId;
+        if (state.selectedId === id) {
+          if (idx < newEntries.length) {
+            newSelectedId = newEntries[idx]?.id ?? null;
+          } else {
+            newSelectedId = newEntries[newEntries.length - 1]?.id ?? null;
+          }
+        }
+
+        return { entries: newEntries, selectedId: newSelectedId };
+      });
     } catch (e) {
       console.error("Failed to delete entry:", e);
     }
