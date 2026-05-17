@@ -393,7 +393,7 @@ export function ClipboardHistory() {
         onFilterChange={setActiveFilter}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden" onMouseDown={e => e.preventDefault()}>
         {/* Left panel — entry list */}
         <div ref={listRef} className="w-[380px] shrink-0 overflow-y-auto border-r border-border">
           {entries.length === 0
@@ -442,7 +442,7 @@ export function ClipboardHistory() {
       </div>
 
       {/* Bottom action bar */}
-      <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0">
+      <div className="flex items-center justify-between px-4 h-11 border-t border-border bg-bg-primary shrink-0" onMouseDown={e => { if ((e.target as HTMLElement).tagName !== 'BUTTON') e.preventDefault(); }}>
         <button
           className="flex items-center gap-2 text-text-primary hover:text-text-accent transition-colors rounded px-1.5 py-1 -ml-1.5"
           onClick={() => navigateTo("about")}
