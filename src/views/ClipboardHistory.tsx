@@ -451,12 +451,15 @@ export function ClipboardHistory() {
           <span className="text-[13px] font-medium">Magpie</span>
         </button>
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium">
+          <button
+            className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium hover:text-text-accent transition-colors"
+            onClick={handlePaste}
+          >
             Paste to
             {" "}
             {activeApp}
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
-          </span>
+          </button>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>
           <button
             className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors"
