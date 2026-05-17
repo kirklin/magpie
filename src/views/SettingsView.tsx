@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
+import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { useToastStore } from "../components/Toast";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
+import type { ThemeMode } from "../stores/settings";
 import { useSettingsStore } from "../stores/settings";
 
 export function SettingsView() {
@@ -84,6 +86,11 @@ export function SettingsView() {
     }
   };
 
+  const handleShortcutChange = async (shortcut: string) => {
+    await updateSetting("global_shortcut", shortcut);
+    addToast("快捷键已更新");
+  };
+
   if (isLoading) {
     return null;
   }
@@ -120,6 +127,28 @@ export function SettingsView() {
               ]}
               value={settings.default_action}
               onChange={val => updateSetting("default_action", val as "copy" | "paste")}
+            />
+          </SettingGroup>
+
+          <SettingGroup title="外观">
+            <SettingSelect
+              label="主题"
+              options={[
+                { label: "跟随系统", value: "system" },
+                { label: "深色", value: "dark" },
+                { label: "浅色", value: "light" },
+              ]}
+              value={settings.theme}
+              onChange={val => updateSetting("theme", val as ThemeMode)}
+            />
+          </SettingGroup>
+
+          <SettingGroup title="快捷键">
+            <ShortcutRecorder
+              label="唤起窗口"
+              description="全局快捷键，在任意应用中唤起 Magpie"
+              value={settings.global_shortcut}
+              onChange={handleShortcutChange}
             />
           </SettingGroup>
 

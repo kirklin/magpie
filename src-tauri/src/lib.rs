@@ -125,6 +125,7 @@ pub fn run() {
             commands::snippet::save_as_snippet,
             // Settings commands
             commands::settings::get_default_settings,
+            commands::settings::update_global_shortcut,
             // System commands
             commands::system::get_app_icon,
             commands::system::get_file_icon,
@@ -191,12 +192,31 @@ pub fn run() {
                 });
             }
 
-            // Register global shortcut: Cmd+Shift+V
+            // Register global shortcut — read from persisted settings or use default
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+            let shortcut_key = {
+                // Try to read from the settings store file
+                let app_dir = app.path().app_data_dir().ok();
+                let mut saved_shortcut: Option<String> = None;
+                if let Some(dir) = app_dir {
+                    let store_path = dir.join("settings.json");
+                    if store_path.exists() {
+                        if let Ok(contents) = std::fs::read_to_string(&store_path) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                                if let Some(s) = json.get("global_shortcut").and_then(|v| v.as_str()) {
+                                    saved_shortcut = Some(s.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                saved_shortcut.unwrap_or_else(|| "CmdOrCtrl+Shift+V".to_string())
+            };
 
             let handle_for_shortcut = app.handle().clone();
             app.global_shortcut().on_shortcut(
-                "CmdOrCtrl+Shift+V",
+                shortcut_key.as_str(),
                 move |_app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         toggle_window(&handle_for_shortcut);
@@ -204,7 +224,7 @@ pub fn run() {
                 },
             )?;
 
-            log::info!("Global shortcut registered: Cmd+Shift+V");
+            log::info!("Global shortcut registered: {}", shortcut_key);
 
             // Delay clipboard monitor start to let DB initialize
             let monitor_handle = app.handle().clone();
