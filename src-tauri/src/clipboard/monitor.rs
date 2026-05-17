@@ -53,6 +53,7 @@ pub fn start_monitor(app_handle: AppHandle) {
     state.is_running.store(true, Ordering::SeqCst);
     let state_clone = Arc::clone(&state);
     let classifier = ContentClassifier::new();
+    // classifier is wrapped in Arc inside the loop below
 
     tauri::async_runtime::spawn(async move {
         log::info!("Clipboard monitor started, waiting for DB...");
@@ -91,49 +92,59 @@ pub fn start_monitor(app_handle: AppHandle) {
 
         log::info!("Clipboard monitor polling started");
 
+        let classifier = Arc::new(classifier);
+
         loop {
             if !state_clone.is_running.load(Ordering::SeqCst) {
                 log::info!("Clipboard monitor stopped");
                 break;
             }
 
-            // Wrap each poll cycle with a timeout to guarantee the monitor
-            // loop never gets stuck — if any cycle takes >5s, skip and retry.
-            let monitor_result = tokio::time::timeout(
-                Duration::from_secs(5),
-                read_clipboard_and_store(&app_handle, &state_clone, &classifier),
-            ).await;
+            // Quick check: has the pasteboard changed?
+            let changed = has_pasteboard_changed(&app_handle, &state_clone);
 
-            match monitor_result {
-                Ok(Ok(Some(payload))) => {
-                    log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}", 
-                        payload.content_type,
-                        payload.content_preview.as_deref().unwrap_or("?"),
-                        payload.id
-                    );
-                    if let Err(e) = app_handle.emit("clipboard://changed", payload) {
-                        log::error!("[Clipboard] Failed to emit event: {}", e);
+            if changed {
+                // Spawn processing in a separate task so we NEVER block the poller.
+                // This is the key fix: DB writes, image encoding, and source app
+                // detection all happen off the hot path.
+                let app = app_handle.clone();
+                let cls = classifier.clone();
+                tokio::spawn(async move {
+                    let result = tokio::time::timeout(
+                        Duration::from_secs(5),
+                        read_clipboard_and_store(&app, &cls),
+                    ).await;
+
+                    match result {
+                        Ok(Ok(Some(payload))) => {
+                            log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}",
+                                payload.content_type,
+                                payload.content_preview.as_deref().unwrap_or("?"),
+                                payload.id
+                            );
+                            if let Err(e) = app.emit("clipboard://changed", payload) {
+                                log::error!("[Clipboard] Failed to emit event: {}", e);
+                            }
+                        }
+                        Ok(Ok(None)) => {}
+                        Ok(Err(e)) => log::error!("[Clipboard] Process error: {}", e),
+                        Err(_) => log::error!("[Clipboard] Process timed out (5s)"),
                     }
-                }
-                Ok(Ok(None)) => {} // no change
-                Ok(Err(e)) => {
-                    log::error!("[Clipboard] Monitor error: {}", e);
-                }
-                Err(_) => {
-                    log::error!("[Clipboard] Monitor cycle timed out (5s) — skipping this cycle");
-                }
+                });
             }
 
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            // 50ms polling — safe because the check is just an integer comparison
+            // dispatched to the main thread. All heavy work is spawned above.
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     });
 }
 
-/// Read the current pasteboard change count (macOS).
-/// IMPORTANT: NSPasteboard API must be called on the main thread.
-/// We dispatch via run_on_main_thread with a timeout to avoid deadlocking.
+/// Fast check: has the pasteboard changed since last time?
+/// Only reads an integer — designed to be called from the hot polling loop.
+/// Atomically updates the stored count if changed.
 #[cfg(target_os = "macos")]
-fn get_pasteboard_change_count(app_handle: &AppHandle) -> i64 {
+fn has_pasteboard_changed(app_handle: &AppHandle, state: &Arc<ClipboardMonitorState>) -> bool {
     use std::sync::mpsc;
 
     let (tx, rx) = mpsc::channel();
@@ -149,46 +160,35 @@ fn get_pasteboard_change_count(app_handle: &AppHandle) -> i64 {
     });
 
     if dispatched.is_err() {
-        log::warn!("[Clipboard] Failed to dispatch changeCount to main thread");
-        return -1;
+        return false;
     }
 
-    // 100ms timeout — changeCount is very fast, if it takes longer something is wrong
-    rx.recv_timeout(std::time::Duration::from_millis(100))
-        .unwrap_or_else(|_| {
-            log::warn!("[Clipboard] Timed out reading changeCount");
-            -1
-        })
+    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+        Ok(current) => {
+            let last = state.last_change_count.load(Ordering::SeqCst);
+            if current != last && current >= 0 {
+                state.last_change_count.store(current, Ordering::SeqCst);
+                log::debug!("Pasteboard changeCount: {} -> {}", last, current);
+                true
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
 }
 
-/// Read clipboard content and store if changed
+#[cfg(not(target_os = "macos"))]
+fn has_pasteboard_changed(_app_handle: &AppHandle, _state: &Arc<ClipboardMonitorState>) -> bool {
+    false
+}
+
+/// Read clipboard content and store. Called AFTER change is detected.
 async fn read_clipboard_and_store(
     app_handle: &AppHandle,
-    state: &Arc<ClipboardMonitorState>,
     classifier: &ContentClassifier,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
-
-    // Step 1: Check if the pasteboard has actually changed using changeCount.
-    // This is much more reliable than comparing content hashes.
-    #[cfg(target_os = "macos")]
-    {
-        let current_count = get_pasteboard_change_count(app_handle);
-        let last_count = state.last_change_count.load(Ordering::SeqCst);
-
-        // -1 means we failed to read changeCount (timeout) — skip this cycle
-        if current_count == -1 {
-            return Ok(None);
-        }
-
-        if current_count == last_count {
-            return Ok(None); // Pasteboard unchanged, skip
-        }
-
-        // Update the change count immediately so we don't re-process
-        state.last_change_count.store(current_count, Ordering::SeqCst);
-        log::debug!("Pasteboard changeCount: {} -> {}", last_count, current_count);
-    }
 
     // Step 2: The pasteboard changed — determine what's on it.
 
