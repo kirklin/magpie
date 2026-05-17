@@ -2,7 +2,7 @@ import type { ClipboardEntry } from "../stores/clipboard";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Pin, Settings } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, buildClipboardActions } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { EmptyState } from "../components/EmptyState";
@@ -38,6 +38,7 @@ export function ClipboardHistory() {
   const { navigateTo } = useNavigationStore();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
+  const isComposingRef = useRef(false);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -50,9 +51,11 @@ export function ClipboardHistory() {
   // Group entries by date
   const groupedEntries = useMemo(() => groupByDate(entries), [entries]);
 
-  // Fetch entries on mount and when search changes
+  // Fetch entries on mount and when search changes (but not during IME composition)
   useEffect(() => {
-    fetchEntries();
+    if (!isComposingRef.current) {
+      fetchEntries();
+    }
   }, [deferredSearch]);
 
   // Listen for clipboard changes from Rust
@@ -225,6 +228,13 @@ export function ClipboardHistory() {
       <SearchBar
         value={searchQuery}
         onChange={setSearchQuery}
+        onCompositionChange={(composing) => {
+          isComposingRef.current = composing;
+          if (!composing) {
+            // Composition ended, trigger fetch with final value
+            fetchEntries();
+          }
+        }}
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
       />

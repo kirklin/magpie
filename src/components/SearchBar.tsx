@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
+  onCompositionChange?: (isComposing: boolean) => void;
   activeFilter: string | null;
   onFilterChange: (filter: string | null) => void;
   placeholder?: string;
@@ -20,7 +21,7 @@ const FILTER_OPTIONS = [
   { value: "email", label: "Emails Only" },
 ];
 
-export function SearchBar({ value, onChange, activeFilter, onFilterChange, placeholder = "Type to filter entries…" }: SearchBarProps) {
+export function SearchBar({ value, onChange, onCompositionChange, activeFilter, onFilterChange, placeholder = "Type to filter entries…" }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -41,6 +42,12 @@ export function SearchBar({ value, onChange, activeFilter, onFilterChange, place
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
+        onCompositionStart={() => onCompositionChange?.(true)}
+        onCompositionEnd={(e) => {
+          onCompositionChange?.(false);
+          // Ensure the final composed value triggers a search
+          onChange((e.target as HTMLInputElement).value);
+        }}
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"

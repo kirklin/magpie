@@ -66,7 +66,8 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
   setSearchQuery: (query) => {
     set({ searchQuery: query });
-    get().fetchEntries();
+    // Fetching is handled by the view's useDeferredValue + useEffect
+    // to avoid race conditions during IME composition
   },
 
   setActiveFilter: (filter) => {
