@@ -1,6 +1,6 @@
 [package]
 name = "magpie"
-version = "0.3.0"
+version = "0.3.1"
 description = "A smart clipboard manager for macOS"
 authors = ["Kirk Lin"]
 edition = "2024"
