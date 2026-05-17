@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCommandHold } from "../hooks/useCommandHold";
 import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -55,6 +56,9 @@ export function ClipboardHistory() {
   const isComposingRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const searchBarRef = useRef<SearchBarRef>(null);
+
+  // Command-hold quick-paste feature
+  const isCommandHeld = useCommandHold(300);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -196,10 +200,33 @@ export function ClipboardHistory() {
 
   // --- Keyboard navigation ---
 
+  // Quick-paste helper: paste the Nth visible entry (0-indexed)
+  const quickPasteByIndex = useCallback(async (index: number) => {
+    const entry = entries[index];
+    if (!entry) return;
+    if (entry.content_type === "image" && entry.image_path) {
+      pasteImageEntry(entry.image_path);
+    } else if (entry.content_type === "file" && entry.file_paths) {
+      pasteFileEntry(entry.file_paths);
+    } else if (entry.text_content) {
+      pasteEntry(entry.text_content);
+    }
+  }, [entries, pasteEntry, pasteFileEntry, pasteImageEntry]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       // Don't handle when modals are open
       if (isActionPanelOpen || isEditModalOpen || isConfirmClearOpen) return;
+
+      // ⌘ + number (1-9) → quick-paste the Nth item
+      if (e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey) {
+        const num = Number(e.key);
+        if (num >= 1 && num <= 9) {
+          e.preventDefault();
+          quickPasteByIndex(num - 1);
+          return;
+        }
+      }
 
       const target = e.target as HTMLElement;
       // When typing in the search input, only handle navigation keys and ⌘ shortcuts
@@ -320,6 +347,7 @@ export function ClipboardHistory() {
       setSelectedId, handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
       handleDelete, handleTogglePin, handleEditContent, handleOpenUrl,
       handleAppendToClipboard, handleSaveAsFile, handleClearHistory, navigateTo,
+      quickPasteByIndex,
     ],
   );
 
@@ -395,7 +423,10 @@ export function ClipboardHistory() {
 
       <div className="flex flex-1 overflow-hidden" onMouseDown={e => e.preventDefault()}>
         {/* Left panel — entry list */}
-        <div ref={listRef} className="w-[380px] shrink-0 overflow-y-auto border-r border-border">
+        <div className="relative w-[380px] shrink-0 border-r border-border">
+          {/* Quick-paste gradient mask — single overlay for entire list right edge */}
+          {isCommandHeld && <div className="quick-paste-mask" />}
+          <div ref={listRef} className="h-full overflow-y-auto">
           {entries.length === 0
             ? (
                 <EmptyState
@@ -412,27 +443,36 @@ export function ClipboardHistory() {
                         {dateLabel === "Pinned" && <Pin size={10} className="shrink-0" />}
                         {dateLabel}
                       </div>
-                      {(groupEntries as ClipboardEntry[]).map(entry => (
-                        <ClipboardItem
-                          key={entry.id}
-                          entry={entry}
-                          isSelected={entry.id === selectedId}
-                          onClick={() => setSelectedId(entry.id)}
-                          onDoubleClick={async () => {
-                            if (entry.content_type === "image" && entry.image_path) {
-                              pasteImageEntry(entry.image_path);
-                            } else if (entry.content_type === "file" && entry.file_paths) {
-                              pasteFileEntry(entry.file_paths);
-                            } else if (entry.text_content) {
-                              pasteEntry(entry.text_content);
-                            }
-                          }}
-                        />
-                      ))}
+                      {(groupEntries as ClipboardEntry[]).map((entry) => {
+                        // Compute the flat visible index for quick-paste badge
+                        const flatIdx = entries.indexOf(entry);
+                        const qpIndex = isCommandHeld && flatIdx >= 0 && flatIdx < 9
+                          ? flatIdx + 1
+                          : undefined;
+                        return (
+                          <ClipboardItem
+                            key={entry.id}
+                            entry={entry}
+                            isSelected={entry.id === selectedId}
+                            quickPasteIndex={qpIndex}
+                            onClick={() => setSelectedId(entry.id)}
+                            onDoubleClick={async () => {
+                              if (entry.content_type === "image" && entry.image_path) {
+                                pasteImageEntry(entry.image_path);
+                              } else if (entry.content_type === "file" && entry.file_paths) {
+                                pasteFileEntry(entry.file_paths);
+                              } else if (entry.text_content) {
+                                pasteEntry(entry.text_content);
+                              }
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
               )}
+          </div>
         </div>
 
         {/* Right panel — preview */}

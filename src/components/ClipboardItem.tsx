@@ -7,11 +7,13 @@ import { NativeFileIcon } from "./PreviewPanel";
 interface ClipboardItemProps {
   entry: ClipboardEntry;
   isSelected: boolean;
+  /** When set (1-9), show a floating quick-paste number badge */
+  quickPasteIndex?: number;
   onClick: () => void;
   onDoubleClick: () => void;
 }
 
-export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: ClipboardItemProps) {
+export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onDoubleClick }: ClipboardItemProps) {
   const typeIcon = getTypeIcon(entry.content_type);
   const isImage = entry.content_type === "image" && entry.image_path;
   const isFile = entry.content_type === "file" && entry.file_paths;
@@ -60,7 +62,7 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
   return (
     <div
       data-entry-id={entry.id}
-      className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer rounded-md mx-2 my-0.5 select-none ${
+      className={`relative flex items-center gap-2.5 px-3 py-2 cursor-pointer rounded-md mx-2 my-0.5 select-none ${
         isSelected
           ? "bg-bg-active text-text-primary shadow-sm"
           : "text-text-primary hover:bg-bg-hover"
@@ -120,6 +122,13 @@ export function ClipboardItem({ entry, isSelected, onClick, onDoubleClick }: Cli
 
       {entry.is_pinned && (
         <Pin size={12} className="shrink-0 text-text-tertiary" />
+      )}
+
+      {/* Quick-paste number badge */}
+      {quickPasteIndex != null && (
+        <kbd className="quick-paste-badge">
+          {quickPasteIndex}
+        </kbd>
       )}
     </div>
   );
