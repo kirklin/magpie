@@ -204,6 +204,22 @@ fn current_change_count(_app_handle: &AppHandle) -> Option<i64> {
     None
 }
 
+/// Mark the current pasteboard state as "already seen" by the monitor.
+///
+/// Call this immediately after Magpie itself writes to the clipboard (paste or
+/// copy actions). Otherwise the monitor detects that write as a brand-new
+/// clipboard change and re-captures it — creating spurious history entries and
+/// bumping the just-used item to the top in a feedback loop.
+pub fn mark_self_write(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(count) = current_change_count(app_handle) {
+            let state = app_handle.state::<Arc<ClipboardMonitorState>>();
+            state.last_change_count.store(count, Ordering::SeqCst);
+        }
+    }
+}
+
 /// Read clipboard content and store. Called AFTER change is detected.
 async fn read_clipboard_and_store(
     app_handle: &AppHandle,

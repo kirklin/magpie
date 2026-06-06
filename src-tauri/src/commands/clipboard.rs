@@ -224,6 +224,7 @@ pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Res
         if !success {
             return Err("Failed to write image to pasteboard".to_string());
         }
+        crate::clipboard::monitor::mark_self_write(&app_handle);
 
         // Hide and paste
         app_handle.hide().map_err(|e| e.to_string())?;
@@ -262,6 +263,7 @@ pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(),
         if !success {
             return Err("Failed to write image to pasteboard".to_string());
         }
+        crate::clipboard::monitor::mark_self_write(&app_handle);
     }
 
     Ok(())
@@ -274,6 +276,8 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
         .clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    // Don't let the monitor re-capture our own write.
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // 2. Hide the entire application (returns focus to previous app)
     app_handle.hide().map_err(|e| e.to_string())?;
@@ -287,7 +291,9 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
 
 #[tauri::command]
 pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
-    paste::copy_to_clipboard(&app_handle, &text)
+    paste::copy_to_clipboard(&app_handle, &text)?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -296,6 +302,7 @@ pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<
         .clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     app_handle.hide().map_err(|e| e.to_string())?;
     
@@ -324,6 +331,7 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
             .write_text(&file_paths.join("\n"))
             .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
     }
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // Hide the app and paste
     app_handle.hide().map_err(|e| e.to_string())?;
@@ -332,7 +340,7 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
 }
 
 #[tauri::command]
-pub fn copy_file_entry(file_paths_json: String) -> Result<(), String> {
+pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
 
@@ -341,6 +349,7 @@ pub fn copy_file_entry(file_paths_json: String) -> Result<(), String> {
         write_files_to_pasteboard(&file_paths)?;
     }
 
+    crate::clipboard::monitor::mark_self_write(&app_handle);
     Ok(())
 }
 
@@ -406,7 +415,9 @@ pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), St
     app_handle
         .clipboard()
         .write_text(&combined)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
+    Ok(())
 }
 
 /// Save clipboard entry content to a file using a native save dialog
@@ -476,6 +487,7 @@ pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Resul
         .clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // 2. Get the target app's bundle_id
     let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
@@ -538,6 +550,7 @@ pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: Stri
         if !success {
             return Err("Failed to write image to pasteboard".to_string());
         }
+        crate::clipboard::monitor::mark_self_write(&app_handle);
     }
 
     // 2. Activate target app, paste, re-focus (same as text version)
@@ -586,6 +599,7 @@ pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: 
             .write_text(&file_paths.join("\n"))
             .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
     }
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // 2. Activate target app, paste, re-focus
     let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
