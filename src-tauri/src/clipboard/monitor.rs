@@ -249,15 +249,28 @@ async fn read_clipboard_and_store(
         }
     }
 
-    // 2b. Try to read text content
+    // 2b. Try to read plain text content
     let text_result = app_handle.clipboard().read_text();
 
     match text_result {
         Ok(text) if !text.is_empty() => {
-            store_text_entry(app_handle, classifier, text).await
+            store_text_entry(app_handle, classifier, text, None).await
         }
         _ => {
-            // 2c. Try to read image
+            // 2c. Fallback: rich content that exposes only an HTML flavor with no
+            // plain-text representation (some editors / web apps). Capture the
+            // HTML and store a stripped plain-text version for display/search.
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(html) = read_html_from_pasteboard(app_handle) {
+                    let plain = html_to_plain_text(&html);
+                    if !plain.is_empty() {
+                        return store_text_entry(app_handle, classifier, plain, Some(html)).await;
+                    }
+                }
+            }
+
+            // 2d. Try to read image
             match app_handle.clipboard().read_image() {
                 Ok(image_data) => {
                     store_image_entry(app_handle, image_data).await
@@ -269,6 +282,54 @@ async fn read_clipboard_and_store(
             }
         }
     }
+}
+
+/// Read an HTML representation from the pasteboard, if present.
+#[cfg(target_os = "macos")]
+fn read_html_from_pasteboard(app_handle: &AppHandle) -> Option<String> {
+    use std::sync::mpsc;
+
+    let (tx, rx) = mpsc::channel();
+    let dispatched = app_handle.run_on_main_thread(move || {
+        use objc2_app_kit::NSPasteboard;
+        use objc2_foundation::NSString;
+        use objc2::rc::autoreleasepool;
+
+        let html = autoreleasepool(|_| {
+            let pasteboard = NSPasteboard::generalPasteboard();
+            let html_type = NSString::from_str("public.html");
+            pasteboard
+                .stringForType(&html_type)
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty())
+        });
+        let _ = tx.send(html);
+    });
+
+    if dispatched.is_err() {
+        return None;
+    }
+
+    rx.recv_timeout(std::time::Duration::from_millis(150)).ok().flatten()
+}
+
+/// Strip HTML markup down to a readable plain-text approximation.
+#[cfg(target_os = "macos")]
+fn html_to_plain_text(html: &str) -> String {
+    use regex::Regex;
+
+    // Drop <script>/<style> blocks entirely, then all remaining tags.
+    let re = Regex::new(r"(?is)<(script|style)\b[^>]*>.*?</(script|style)>|<[^>]+>").unwrap();
+    let stripped = re.replace_all(html, " ");
+    let decoded = stripped
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
+    // Collapse runs of whitespace.
+    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Returns true if the general pasteboard carries one of the standard markers
@@ -504,11 +565,13 @@ async fn store_file_entry(
     }
 }
 
-/// Store a text clipboard entry
+/// Store a text clipboard entry. `html` carries the original HTML markup when
+/// the content was captured from a rich-text/HTML-only source.
 async fn store_text_entry(
     app_handle: &AppHandle,
     classifier: &ContentClassifier,
     text: String,
+    html: Option<String>,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     // Hash the content for database dedup only
     let mut hasher = Sha256::new();
@@ -556,10 +619,11 @@ async fn store_text_entry(
                     (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
                 } else {
                     let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, text_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                        "INSERT INTO clipboard_entries (content_type, text_content, html_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                     )
                     .bind(content_type)
                     .bind(&text)
+                    .bind(&html)
                     .bind(&hash)
                     .bind(&preview)
                     .bind(byte_size)
@@ -570,7 +634,7 @@ async fn store_text_entry(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    
+
                     (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
                 }
             }
