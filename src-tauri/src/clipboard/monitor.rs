@@ -11,6 +11,10 @@ use super::classifier::ContentClassifier;
 pub struct ClipboardMonitorState {
     pub last_change_count: AtomicI64,
     pub is_running: std::sync::atomic::AtomicBool,
+    /// True while a capture (read + store) for a detected change is in flight.
+    /// Prevents the 50ms poller from spawning duplicate processing tasks for
+    /// the same clipboard change while a (potentially slow) read is pending.
+    pub is_processing: std::sync::atomic::AtomicBool,
 }
 
 impl Default for ClipboardMonitorState {
@@ -18,6 +22,7 @@ impl Default for ClipboardMonitorState {
         Self {
             last_change_count: AtomicI64::new(0),
             is_running: std::sync::atomic::AtomicBool::new(false),
+            is_processing: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -100,37 +105,60 @@ pub fn start_monitor(app_handle: AppHandle) {
                 break;
             }
 
-            // Quick check: has the pasteboard changed?
-            let changed = has_pasteboard_changed(&app_handle, &state_clone);
+            // Quick check: read the current pasteboard change count (an integer).
+            // Crucially we do NOT commit it here — the stored `last_change_count`
+            // is only advanced once the content has actually been captured, so a
+            // failed/timed-out read leaves the change pending and the next poll
+            // retries it instead of dropping the copy forever.
+            if let Some(current) = current_change_count(&app_handle) {
+                let last = state_clone.last_change_count.load(Ordering::SeqCst);
+                // Only spawn a capture if the count changed AND no capture is
+                // already in flight (`swap(true)` atomically acquires the guard).
+                if current != last
+                    && current >= 0
+                    && !state_clone.is_processing.swap(true, Ordering::SeqCst)
+                {
+                    log::debug!("Pasteboard changeCount: {} -> {}", last, current);
+                    // Spawn processing in a separate task so we NEVER block the poller.
+                    // DB writes, image encoding, and source app detection all happen
+                    // off the hot path.
+                    let app = app_handle.clone();
+                    let cls = classifier.clone();
+                    let st = Arc::clone(&state_clone);
+                    tokio::spawn(async move {
+                        let result = tokio::time::timeout(
+                            Duration::from_secs(5),
+                            read_clipboard_and_store(&app, &cls),
+                        ).await;
 
-            if changed {
-                // Spawn processing in a separate task so we NEVER block the poller.
-                // This is the key fix: DB writes, image encoding, and source app
-                // detection all happen off the hot path.
-                let app = app_handle.clone();
-                let cls = classifier.clone();
-                tokio::spawn(async move {
-                    let result = tokio::time::timeout(
-                        Duration::from_secs(5),
-                        read_clipboard_and_store(&app, &cls),
-                    ).await;
-
-                    match result {
-                        Ok(Ok(Some(payload))) => {
-                            log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}",
-                                payload.content_type,
-                                payload.content_preview.as_deref().unwrap_or("?"),
-                                payload.id
-                            );
-                            if let Err(e) = app.emit("clipboard://changed", payload) {
-                                log::error!("[Clipboard] Failed to emit event: {}", e);
+                        match result {
+                            Ok(Ok(Some(payload))) => {
+                                // Captured successfully — commit the change count.
+                                st.last_change_count.store(current, Ordering::SeqCst);
+                                log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}",
+                                    payload.content_type,
+                                    payload.content_preview.as_deref().unwrap_or("?"),
+                                    payload.id
+                                );
+                                if let Err(e) = app.emit("clipboard://changed", payload) {
+                                    log::error!("[Clipboard] Failed to emit event: {}", e);
+                                }
                             }
+                            Ok(Ok(None)) => {
+                                // Nothing storable on the pasteboard — still commit so
+                                // we don't retry the same un-capturable change forever.
+                                st.last_change_count.store(current, Ordering::SeqCst);
+                            }
+                            // Transient failure / timeout: do NOT commit the count, so
+                            // the next poll sees the change again and retries.
+                            Ok(Err(e)) => log::error!("[Clipboard] Process error (will retry): {}", e),
+                            Err(_) => log::error!("[Clipboard] Process timed out (5s, will retry)"),
                         }
-                        Ok(Ok(None)) => {}
-                        Ok(Err(e)) => log::error!("[Clipboard] Process error: {}", e),
-                        Err(_) => log::error!("[Clipboard] Process timed out (5s)"),
-                    }
-                });
+
+                        // Release the in-flight guard.
+                        st.is_processing.store(false, Ordering::SeqCst);
+                    });
+                }
             }
 
             // 50ms polling — safe because the check is just an integer comparison
@@ -140,11 +168,12 @@ pub fn start_monitor(app_handle: AppHandle) {
     });
 }
 
-/// Fast check: has the pasteboard changed since last time?
-/// Only reads an integer — designed to be called from the hot polling loop.
-/// Atomically updates the stored count if changed.
+/// Read the current pasteboard change count (an integer) on the main thread.
+/// Returns `None` if the dispatch or read fails/times out — the caller treats
+/// `None` as "no reliable reading this tick" and simply retries next poll,
+/// rather than mistaking it for "no change".
 #[cfg(target_os = "macos")]
-fn has_pasteboard_changed(app_handle: &AppHandle, state: &Arc<ClipboardMonitorState>) -> bool {
+fn current_change_count(app_handle: &AppHandle) -> Option<i64> {
     use std::sync::mpsc;
 
     let (tx, rx) = mpsc::channel();
@@ -160,27 +189,15 @@ fn has_pasteboard_changed(app_handle: &AppHandle, state: &Arc<ClipboardMonitorSt
     });
 
     if dispatched.is_err() {
-        return false;
+        return None;
     }
 
-    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        Ok(current) => {
-            let last = state.last_change_count.load(Ordering::SeqCst);
-            if current != last && current >= 0 {
-                state.last_change_count.store(current, Ordering::SeqCst);
-                log::debug!("Pasteboard changeCount: {} -> {}", last, current);
-                true
-            } else {
-                false
-            }
-        }
-        Err(_) => false,
-    }
+    rx.recv_timeout(std::time::Duration::from_millis(100)).ok()
 }
 
 #[cfg(not(target_os = "macos"))]
-fn has_pasteboard_changed(_app_handle: &AppHandle, _state: &Arc<ClipboardMonitorState>) -> bool {
-    false
+fn current_change_count(_app_handle: &AppHandle) -> Option<i64> {
+    None
 }
 
 /// Read clipboard content and store. Called AFTER change is detected.
