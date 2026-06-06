@@ -91,11 +91,25 @@ pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i64) -> Result<()
     let instances = db_instances.0.read().await;
 
     if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
+        // Capture the image path first so we can remove the file after the row.
+        let image_path: Option<String> = sqlx::query_scalar(
+            "SELECT image_path FROM clipboard_entries WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .flatten();
+
         sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
+
+        if let Some(path) = image_path {
+            let _ = std::fs::remove_file(path);
+        }
         Ok(())
     } else {
         Err("Database not available".to_string())
@@ -108,10 +122,24 @@ pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String
     let instances = db_instances.0.read().await;
 
     if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
+        // Collect image files of the rows we're about to delete so they don't
+        // become orphaned on disk.
+        let image_paths: Vec<String> = sqlx::query_scalar(
+            "SELECT image_path FROM clipboard_entries \
+             WHERE is_pinned = 0 AND image_path IS NOT NULL",
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
         sqlx::query("DELETE FROM clipboard_entries WHERE is_pinned = 0")
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
+
+        for path in image_paths {
+            let _ = std::fs::remove_file(path);
+        }
         Ok(())
     } else {
         Err("Database not available".to_string())
