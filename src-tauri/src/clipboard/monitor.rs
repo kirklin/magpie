@@ -575,7 +575,9 @@ async fn store_image_entry(
 
     let width = image_data.width();
     let height = image_data.height();
-    let filename = format!("{}.png", &hash[..16]);
+    // Use the full content hash for the filename so it matches the DB dedup key
+    // and two distinct images can never collide on a 16-char prefix.
+    let filename = format!("{}.png", hash);
     let file_path = images_dir.join(&filename);
 
     // Encode to PNG using a minimal PNG encoder
