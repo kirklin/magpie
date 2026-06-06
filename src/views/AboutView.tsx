@@ -54,7 +54,7 @@ export function AboutView() {
               label="开发者"
               value={(
                 <button
-                  className="transition-colors cursor-pointer hover:text-text-primary"
+                  className="transition-colors hover:text-text-primary"
                   onClick={() => openUrl("https://github.com/kirklin")}
                 >
                   Kirk Lin
@@ -65,7 +65,7 @@ export function AboutView() {
               label="开源仓库"
               value={(
                 <button
-                  className="transition-colors cursor-pointer hover:text-text-primary"
+                  className="transition-colors hover:text-text-primary"
                   onClick={() => openUrl("https://github.com/kirklin/magpie")}
                 >
                   GitHub

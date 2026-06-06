@@ -137,7 +137,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
         />
         {value && (
           <button
-            className="no-drag w-5 h-5 flex items-center justify-center border-none bg-bg-tertiary text-text-secondary rounded-full cursor-pointer text-[10px] transition-all duration-100 hover:bg-bg-active hover:text-text-primary shrink-0"
+            className="no-drag w-5 h-5 flex items-center justify-center border-none bg-bg-tertiary text-text-secondary rounded-full text-[10px] transition-all duration-100 hover:bg-bg-active hover:text-text-primary shrink-0"
             onMouseDown={e => e.preventDefault()}
             onClick={() => onChange("")}
             title="清除"
