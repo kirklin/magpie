@@ -2559,7 +2559,7 @@ dependencies = [
 
 [[package]]
 name = "magpie"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -2571,6 +2571,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "png 0.17.16",
  "regex",
  "serde",
  "serde_json",

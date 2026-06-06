@@ -661,115 +661,19 @@ async fn store_image_entry(
     }
 }
 
-/// Encode RGBA bytes into a PNG file
+/// Encode RGBA bytes into a (properly compressed) PNG file using the `png` crate.
 fn encode_rgba_to_png(rgba: &[u8], width: u32, height: u32, path: &std::path::Path) -> Result<(), String> {
-    use std::io::Write;
-
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut writer = std::io::BufWriter::new(file);
+    let writer = std::io::BufWriter::new(file);
 
-    // Use a simple approach: write raw PNG
-    // PNG signature
-    writer.write_all(&[137, 80, 78, 71, 13, 10, 26, 10]).map_err(|e| e.to_string())?;
+    let mut encoder = png::Encoder::new(writer, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
 
-    // IHDR chunk
-    let mut ihdr_data = Vec::new();
-    ihdr_data.extend_from_slice(&width.to_be_bytes());
-    ihdr_data.extend_from_slice(&height.to_be_bytes());
-    ihdr_data.push(8); // bit depth
-    ihdr_data.push(6); // color type: RGBA
-    ihdr_data.push(0); // compression
-    ihdr_data.push(0); // filter
-    ihdr_data.push(0); // interlace
-    write_png_chunk(&mut writer, b"IHDR", &ihdr_data)?;
-
-    // IDAT chunk - we need to zlib compress the filtered image data
-    // Each row has a filter byte (0 = None) followed by RGBA pixels
-    let row_size = (width as usize) * 4 + 1;
-    let mut raw_data = Vec::with_capacity(row_size * height as usize);
-    for y in 0..height as usize {
-        raw_data.push(0); // filter: None
-        let row_start = y * (width as usize) * 4;
-        let row_end = row_start + (width as usize) * 4;
-        if row_end <= rgba.len() {
-            raw_data.extend_from_slice(&rgba[row_start..row_end]);
-        }
-    }
-
-    // Simple zlib wrapper: header + deflate stored blocks + adler32
-    let compressed = zlib_compress_stored(&raw_data);
-    write_png_chunk(&mut writer, b"IDAT", &compressed)?;
-
-    // IEND chunk
-    write_png_chunk(&mut writer, b"IEND", &[])?;
-
-    writer.flush().map_err(|e| e.to_string())?;
+    let mut png_writer = encoder.write_header().map_err(|e| e.to_string())?;
+    png_writer.write_image_data(rgba).map_err(|e| e.to_string())?;
+    png_writer.finish().map_err(|e| e.to_string())?;
     Ok(())
-}
-
-fn write_png_chunk(writer: &mut impl std::io::Write, chunk_type: &[u8; 4], data: &[u8]) -> Result<(), String> {
-    let len = data.len() as u32;
-    writer.write_all(&len.to_be_bytes()).map_err(|e| e.to_string())?;
-    writer.write_all(chunk_type).map_err(|e| e.to_string())?;
-    writer.write_all(data).map_err(|e| e.to_string())?;
-
-    // CRC32 over chunk_type + data
-    let mut crc_data = Vec::with_capacity(4 + data.len());
-    crc_data.extend_from_slice(chunk_type);
-    crc_data.extend_from_slice(data);
-    let crc = crc32(&crc_data);
-    writer.write_all(&crc.to_be_bytes()).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFFFFFF;
-    for &byte in data {
-        crc ^= byte as u32;
-        for _ in 0..8 {
-            if crc & 1 != 0 {
-                crc = (crc >> 1) ^ 0xEDB88320;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    !crc
-}
-
-fn zlib_compress_stored(data: &[u8]) -> Vec<u8> {
-    // zlib header: CM=8, CINFO=7, FCHECK adjusted
-    let mut out = Vec::new();
-    out.push(0x78); // CMF
-    out.push(0x01); // FLG (no dict, FLEVEL=0)
-
-    // Deflate stored blocks
-    let chunks: Vec<&[u8]> = data.chunks(65535).collect();
-    for (i, chunk) in chunks.iter().enumerate() {
-        let is_last = i == chunks.len() - 1;
-        out.push(if is_last { 0x01 } else { 0x00 }); // BFINAL + BTYPE=00 (stored)
-        let len = chunk.len() as u16;
-        let nlen = !len;
-        out.extend_from_slice(&len.to_le_bytes());
-        out.extend_from_slice(&nlen.to_le_bytes());
-        out.extend_from_slice(chunk);
-    }
-
-    // Adler32 checksum
-    let adler = adler32(data);
-    out.extend_from_slice(&adler.to_be_bytes());
-
-    out
-}
-
-fn adler32(data: &[u8]) -> u32 {
-    let mut a: u32 = 1;
-    let mut b: u32 = 0;
-    for &byte in data {
-        a = (a + byte as u32) % 65521;
-        b = (b + a) % 65521;
-    }
-    (b << 16) | a
 }
 
 /// Get the frontmost application info on macOS.
