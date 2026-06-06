@@ -28,9 +28,13 @@ pub async fn get_app_icon(
     // Fetch from system
     let icon_base64 = fetch_app_icon_macos(&bundle_id)?;
 
-    // Store in cache
+    // Store in cache (bounded to avoid unbounded growth over a long session).
     {
+        const MAX_CACHED_ICONS: usize = 256;
         let mut c = cache.0.lock().map_err(|e| e.to_string())?;
+        if c.len() >= MAX_CACHED_ICONS && !c.contains_key(&bundle_id) {
+            c.clear();
+        }
         c.insert(bundle_id, icon_base64.clone());
     }
 
