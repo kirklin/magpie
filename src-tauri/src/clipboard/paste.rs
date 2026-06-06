@@ -10,8 +10,8 @@ pub fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<Stri
         use objc2::rc::autoreleasepool;
 
         let (tx, rx) = mpsc::channel();
-        
-        let _ = app_handle.run_on_main_thread(move || {
+
+        let dispatched = app_handle.run_on_main_thread(move || {
             let result = autoreleasepool(|_| {
                 let workspace = NSWorkspace::sharedWorkspace();
                 if let Some(app) = workspace.frontmostApplication() {
@@ -29,7 +29,14 @@ pub fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<Stri
             let _ = tx.send(result);
         });
 
-        rx.recv().unwrap_or((None, None))
+        if dispatched.is_err() {
+            return (None, None);
+        }
+
+        // Bounded wait: never hang the caller if the main-thread closure
+        // doesn't run (e.g. main thread busy).
+        rx.recv_timeout(std::time::Duration::from_millis(200))
+            .unwrap_or((None, None))
     }
 
     #[cfg(not(target_os = "macos"))]
