@@ -700,20 +700,33 @@ fn write_files_to_pasteboard(file_paths: &[String]) -> Result<(), String> {
     })
 }
 
-/// Polls until the frontmost application is NOT the specified bundle ID
-async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str, app_handle: &tauri::AppHandle) {
-    let mut retries = 0;
-    while retries < 50 { // max 500ms
+/// Polls until the frontmost application is NOT the specified bundle ID, then
+/// adds a short settle delay so the newly-focused app is ready to receive the
+/// synthesized Cmd+V. Returns whether the focus actually switched.
+async fn wait_for_frontmost_app_switch(ignore_bundle_id: &str, app_handle: &tauri::AppHandle) -> bool {
+    let mut switched = false;
+    for _ in 0..50 { // max ~500ms
         let (bundle_id, _) = paste::get_frontmost_app(app_handle);
         if let Some(id) = bundle_id {
             if id != ignore_bundle_id {
                 log::debug!("Active app switched to: {}", id);
+                switched = true;
                 break;
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        retries += 1;
     }
+
+    if switched {
+        // Give the now-frontmost app a moment to become first responder before
+        // we synthesize the paste keystroke — without this the Cmd+V can race
+        // the focus change and be dropped or land in Magpie.
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    } else {
+        log::warn!("Frontmost app never switched away from {} before paste", ignore_bundle_id);
+    }
+
+    switched
 }
 
 /// Serializable export format for clipboard entries
