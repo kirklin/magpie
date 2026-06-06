@@ -19,28 +19,50 @@ pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(
     }
 }
 
+/// Default global shortcut, used as a fallback so the app is never left
+/// without a working hotkey.
+const DEFAULT_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
+
 /// Re-register the global shortcut at runtime.
-/// Unregisters all existing shortcuts first, then registers the new one.
+///
+/// The new shortcut is validated (parsed) BEFORE the old one is unregistered,
+/// so an invalid value can never leave the app with no shortcut. If a
+/// valid-but-unregisterable combination (e.g. already held by another app)
+/// fails to bind, we fall back to the default shortcut and return an error.
 #[tauri::command]
 pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
     let global_shortcut = app_handle.global_shortcut();
 
-    // Unregister all existing shortcuts
-    global_shortcut.unregister_all()
+    // Validate the format first — no side effects if this fails.
+    let parsed: Shortcut = shortcut
+        .parse()
+        .map_err(|_| format!("快捷键格式无效: {}", shortcut))?;
+
+    // Now it's safe to drop the old binding and install the new one.
+    global_shortcut
+        .unregister_all()
         .map_err(|e| format!("Failed to unregister shortcuts: {}", e))?;
 
-    // Register the new shortcut
     let handle = app_handle.clone();
-    global_shortcut.on_shortcut(
-        shortcut.as_str(),
-        move |_app, _shortcut, event| {
-            if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+    let register = global_shortcut.on_shortcut(parsed, move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            crate::toggle_window(&handle);
+        }
+    });
+
+    if let Err(e) = register {
+        // Valid format but could not be registered. Restore a working hotkey.
+        log::error!("Failed to register '{}': {}; falling back to default", shortcut, e);
+        let handle = app_handle.clone();
+        let _ = global_shortcut.on_shortcut(DEFAULT_SHORTCUT, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
                 crate::toggle_window(&handle);
             }
-        },
-    ).map_err(|e| format!("快捷键格式无效: {}", e))?;
+        });
+        return Err(format!("无法注册快捷键 '{}': {}", shortcut, e));
+    }
 
     log::info!("Global shortcut updated to: {}", shortcut);
     Ok(())
