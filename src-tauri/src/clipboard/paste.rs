@@ -40,12 +40,28 @@ pub fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<Stri
 
 /// Paste content to the active application by writing to clipboard
 /// and simulating Cmd+V keystroke
-pub fn paste_to_active_app(_app_handle: &AppHandle, _text: &str, _plain_text_only: bool) -> Result<(), String> {
+#[allow(unused_variables)]
+pub fn paste_to_active_app(app_handle: &AppHandle, _text: &str, _plain_text_only: bool) -> Result<(), String> {
     // Content is already written to clipboard by the caller
 
     // Simulate Cmd+V using CGEvent on macOS
     #[cfg(target_os = "macos")]
     {
+        // CGEvent key synthesis is silently discarded by macOS unless the app
+        // has Accessibility access. Detect that up front so the paste fails
+        // loudly (with a notification) instead of pretending to succeed — the
+        // content is already on the clipboard, so the user can paste manually.
+        if !crate::check_accessibility_permission() {
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app_handle
+                .notification()
+                .builder()
+                .title("Magpie 无法自动粘贴")
+                .body("内容已复制到剪贴板。请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie 以启用自动粘贴。")
+                .show();
+            return Err("缺少辅助功能权限，无法模拟粘贴".to_string());
+        }
+
         simulate_paste_keystroke();
     }
 

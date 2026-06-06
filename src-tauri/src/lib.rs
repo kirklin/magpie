@@ -343,7 +343,7 @@ pub fn show_window(handle: &tauri::AppHandle) {
 
 /// Check if the app has Accessibility permission (macOS)
 #[cfg(target_os = "macos")]
-fn check_accessibility_permission() -> bool {
+pub(crate) fn check_accessibility_permission() -> bool {
     // AXIsProcessTrusted is in ApplicationServices framework
     unsafe extern "C" {
         fn AXIsProcessTrusted() -> bool;
