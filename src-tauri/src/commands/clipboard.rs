@@ -480,51 +480,19 @@ pub async fn save_entry_as_file(
 /// simulates Cmd+V, then re-focuses Magpie.
 #[tauri::command]
 pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), String> {
-    use std::sync::atomic::Ordering;
-
-    // 1. Write to clipboard
     app_handle
         .clipboard()
         .write_text(&text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // 2. Get the target app's bundle_id
-    let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
-    let bundle_id = prev_state.0.lock().unwrap().clone();
-    let Some(target_bundle_id) = bundle_id else {
-        return Err("No previous app to paste to".to_string());
-    };
-
-    // 3. Set skip-blur flag so the window doesn't auto-hide when we switch focus
-    let skip = app_handle.state::<crate::SkipBlurHide>();
-    skip.0.store(true, Ordering::Relaxed);
-
-    // 4. Activate the target app (Magpie window stays visible because always_on_top)
-    activate_app_by_bundle_id(&app_handle, &target_bundle_id);
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    // 5. Simulate Cmd+V — goes to the now-frontmost target app
-    paste::paste_to_active_app(&app_handle, &text, false)?;
-
-    // 6. Wait for paste to land, then re-focus Magpie
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.set_focus();
-    }
-
-    // 7. Clear skip-blur flag
-    skip.0.store(false, Ordering::Relaxed);
-
-    Ok(())
+    paste_to_previous_app_keeping_window(&app_handle).await
 }
 
 /// Paste an image entry while keeping the Magpie window visible.
 #[tauri::command]
 pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), String> {
-    use std::sync::atomic::Ordering;
-
-    // 1. Write image to pasteboard
+    // Write image to pasteboard
     #[cfg(target_os = "macos")]
     {
         let png_data = std::fs::read(&image_path)
@@ -553,40 +521,16 @@ pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: Stri
         crate::clipboard::monitor::mark_self_write(&app_handle);
     }
 
-    // 2. Activate target app, paste, re-focus (same as text version)
-    let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
-    let bundle_id = prev_state.0.lock().unwrap().clone();
-    let Some(target_bundle_id) = bundle_id else {
-        return Err("No previous app to paste to".to_string());
-    };
-
-    let skip = app_handle.state::<crate::SkipBlurHide>();
-    skip.0.store(true, Ordering::Relaxed);
-
-    activate_app_by_bundle_id(&app_handle, &target_bundle_id);
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    paste::paste_to_active_app(&app_handle, "", false)?;
-
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.set_focus();
-    }
-
-    skip.0.store(false, Ordering::Relaxed);
-
-    Ok(())
+    paste_to_previous_app_keeping_window(&app_handle).await
 }
 
 /// Paste file entries while keeping the Magpie window visible.
 #[tauri::command]
 pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
-    use std::sync::atomic::Ordering;
-
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
 
-    // 1. Write file URLs to pasteboard
+    // Write file URLs to pasteboard
     #[cfg(target_os = "macos")]
     {
         write_files_to_pasteboard(&file_paths)?;
@@ -601,45 +545,83 @@ pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: 
     }
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // 2. Activate target app, paste, re-focus
-    let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
-    let bundle_id = prev_state.0.lock().unwrap().clone();
-    let Some(target_bundle_id) = bundle_id else {
+    paste_to_previous_app_keeping_window(&app_handle).await
+}
+
+/// Shared tail of the paste-and-keep-window commands. The content must already
+/// be on the clipboard. Activates the previously-focused app, waits until it is
+/// actually frontmost (instead of a fixed sleep), synthesizes Cmd+V, then
+/// re-focuses Magpie. The skip-blur flag is always cleared, even on error.
+async fn paste_to_previous_app_keeping_window(app_handle: &AppHandle) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    let target_bundle_id = {
+        let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
+        let guard = prev_state.0.lock().map_err(|_| "previous-app lock poisoned".to_string())?;
+        guard.clone()
+    };
+    let Some(target_bundle_id) = target_bundle_id else {
         return Err("No previous app to paste to".to_string());
     };
 
+    // Keep the window visible while focus moves to the target app.
     let skip = app_handle.state::<crate::SkipBlurHide>();
     skip.0.store(true, Ordering::Relaxed);
 
-    activate_app_by_bundle_id(&app_handle, &target_bundle_id);
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let result = async {
+        if !activate_app_by_bundle_id(app_handle, &target_bundle_id) {
+            return Err(format!("Could not activate target app: {}", target_bundle_id));
+        }
+        // Wait until the target app is genuinely frontmost before pasting.
+        wait_until_frontmost(&target_bundle_id, app_handle).await;
+        paste::paste_to_active_app(app_handle, "", false)?;
 
-    paste::paste_to_active_app(&app_handle, "", false)?;
-
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.set_focus();
+        // Let the paste land, then re-focus Magpie.
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+        if let Some(window) = app_handle.get_webview_window("main") {
+            let _ = window.set_focus();
+        }
+        Ok(())
     }
+    .await;
 
     skip.0.store(false, Ordering::Relaxed);
+    result
+}
 
-    Ok(())
+/// Poll until `target_bundle_id` is the frontmost app (up to ~500ms), then add
+/// a short settle delay. Returns whether it became frontmost.
+async fn wait_until_frontmost(target_bundle_id: &str, app_handle: &AppHandle) -> bool {
+    for _ in 0..50 {
+        if let (Some(id), _) = paste::get_frontmost_app(app_handle) {
+            if id == target_bundle_id {
+                tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                return true;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    log::warn!("Target app {} never became frontmost before paste", target_bundle_id);
+    false
 }
 
 /// Activate a macOS application by its bundle identifier.
 /// Uses NSRunningApplication to bring the app to the foreground.
+/// Returns whether a running app with that bundle id was found and activated.
 #[cfg(target_os = "macos")]
-fn activate_app_by_bundle_id(app_handle: &AppHandle, bundle_id: &str) {
+fn activate_app_by_bundle_id(app_handle: &AppHandle, bundle_id: &str) -> bool {
     use objc2_app_kit::NSRunningApplication;
     use objc2_foundation::NSString;
+    use std::sync::mpsc;
 
     let bid = bundle_id.to_string();
-    let _ = app_handle.run_on_main_thread(move || {
+    let (tx, rx) = mpsc::channel();
+    let dispatched = app_handle.run_on_main_thread(move || {
         let ns_bid = NSString::from_str(&bid);
         let apps = unsafe {
             NSRunningApplication::runningApplicationsWithBundleIdentifier(&ns_bid)
         };
-        if apps.count() > 0 {
+        let activated = if apps.count() > 0 {
             let app = unsafe { apps.objectAtIndex(0) };
             #[allow(deprecated)]
             let _ = unsafe {
@@ -647,12 +629,23 @@ fn activate_app_by_bundle_id(app_handle: &AppHandle, bundle_id: &str) {
                     objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
                 )
             };
-        }
+            true
+        } else {
+            false
+        };
+        let _ = tx.send(activated);
     });
+
+    if dispatched.is_err() {
+        return false;
+    }
+    rx.recv_timeout(std::time::Duration::from_millis(300)).unwrap_or(false)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn activate_app_by_bundle_id(_app_handle: &AppHandle, _bundle_id: &str) {}
+fn activate_app_by_bundle_id(_app_handle: &AppHandle, _bundle_id: &str) -> bool {
+    false
+}
 
 /// Write file paths to macOS NSPasteboard as file URLs
 #[cfg(target_os = "macos")]
