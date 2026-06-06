@@ -467,6 +467,8 @@ async fn store_file_entry(
     file_paths: Vec<String>,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     let file_paths_json = serde_json::to_string(&file_paths).map_err(|e| e.to_string())?;
+    // Human-readable text for search/display (the raw JSON lives in file_paths).
+    let file_paths_text = file_paths.join("\n");
 
     // Hash the file paths for database dedup only
     let mut hasher = Sha256::new();
@@ -525,7 +527,7 @@ async fn store_file_entry(
                         "INSERT INTO clipboard_entries (content_type, text_content, file_paths, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                     )
                     .bind("file")
-                    .bind(&file_paths_json) // also store as text_content for search
+                    .bind(&file_paths_text) // human-readable paths for search/display
                     .bind(&file_paths_json)
                     .bind(&hash)
                     .bind(&preview)
@@ -548,7 +550,7 @@ async fn store_file_entry(
         Ok(Some(ClipboardChangedPayload {
             id,
             content_type: "file".to_string(),
-            text_content: Some(file_paths_json.clone()),
+            text_content: Some(file_paths_text),
             content_preview: Some(preview),
             image_path: None,
             file_paths: Some(file_paths_json),
