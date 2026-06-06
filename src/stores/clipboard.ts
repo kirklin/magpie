@@ -225,6 +225,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_and_keep_window", { text });
     } catch (e) {
       console.error("Failed to paste and keep window:", e);
+      throw e;
     }
   },
 
@@ -233,6 +234,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_image_and_keep_window", { imagePath });
     } catch (e) {
       console.error("Failed to paste image and keep window:", e);
+      throw e;
     }
   },
 
@@ -241,6 +243,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_file_and_keep_window", { filePathsJson });
     } catch (e) {
       console.error("Failed to paste file and keep window:", e);
+      throw e;
     }
   },
 
@@ -269,6 +272,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("copy_clipboard_entry", { text });
     } catch (e) {
       console.error("Failed to copy:", e);
+      throw e;
     }
   },
 
@@ -293,6 +297,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("copy_file_entry", { filePathsJson });
     } catch (e) {
       console.error("Failed to copy file entry:", e);
+      throw e;
     }
   },
 
@@ -309,6 +314,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("copy_image_entry", { imagePath });
     } catch (e) {
       console.error("Failed to copy image entry:", e);
+      throw e;
     }
   },
 

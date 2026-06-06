@@ -108,16 +108,22 @@ export function ClipboardHistory() {
     }
   }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry]);
 
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     if (!selectedEntry) return;
-    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
-      copyImageEntry(selectedEntry.image_path);
-    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-      copyFileEntry(selectedEntry.file_paths);
-    } else if (selectedEntry.text_content) {
-      copyEntry(selectedEntry.text_content);
+    try {
+      if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+        await copyImageEntry(selectedEntry.image_path);
+      } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+        await copyFileEntry(selectedEntry.file_paths);
+      } else if (selectedEntry.text_content) {
+        await copyEntry(selectedEntry.text_content);
+      } else {
+        return;
+      }
+      toast.add("Copied to clipboard");
+    } catch {
+      toast.add("Copy failed");
     }
-    toast.add("Copied to clipboard");
   }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast]);
 
   const handlePastePlainText = useCallback(async () => {
@@ -127,15 +133,19 @@ export function ClipboardHistory() {
 
   const handlePasteKeepWindow = useCallback(async () => {
     if (!selectedEntry) return;
-    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
-      pasteImageAndKeepWindow(selectedEntry.image_path);
+    try {
+      if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+        await pasteImageAndKeepWindow(selectedEntry.image_path);
+      } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+        await pasteFileAndKeepWindow(selectedEntry.file_paths);
+      } else if (selectedEntry.text_content) {
+        await pasteAndKeepWindow(selectedEntry.text_content);
+      } else {
+        return;
+      }
       toast.add("Pasted (window kept open)");
-    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-      pasteFileAndKeepWindow(selectedEntry.file_paths);
-      toast.add("Pasted (window kept open)");
-    } else if (selectedEntry.text_content) {
-      pasteAndKeepWindow(selectedEntry.text_content);
-      toast.add("Pasted (window kept open)");
+    } catch {
+      toast.add("Paste failed");
     }
   }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast]);
 
