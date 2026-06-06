@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useCommandHold } from "../hooks/useCommandHold";
 import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
@@ -55,7 +56,7 @@ export function ClipboardHistory() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
-  const listRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const searchBarRef = useRef<SearchBarRef>(null);
 
   // Command-hold quick-paste feature
@@ -71,6 +72,25 @@ export function ClipboardHistory() {
 
   // Group entries by date
   const groupedEntries = useMemo(() => groupByDate(entries), [entries]);
+
+  // Flatten the date groups into a single row list (header rows + item rows)
+  // so the list can be virtualized. Item rows carry their flat index (position
+  // among entries) for the ⌘-hold quick-paste badge.
+  type Row =
+    | { kind: "header"; label: string }
+    | { kind: "item"; entry: ClipboardEntry; index: number };
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = [];
+    let itemIndex = 0;
+    for (const [label, groupEntries] of groupedEntries) {
+      out.push({ kind: "header", label });
+      for (const entry of groupEntries as ClipboardEntry[]) {
+        out.push({ kind: "item", entry, index: itemIndex });
+        itemIndex += 1;
+      }
+    }
+    return out;
+  }, [groupedEntries]);
 
   // Fetch entries on mount and when search changes (but not during IME composition)
   useEffect(() => {
@@ -383,11 +403,15 @@ export function ClipboardHistory() {
     }
   }, [entries, selectedId, setSelectedId]);
 
-  // Scroll selected item into view on keyboard navigation
+  // Scroll selected item into view on keyboard navigation (via the virtual list).
+  // Depends only on selectedId so appending more pages doesn't yank the scroll.
   useEffect(() => {
-    if (!selectedId || !listRef.current) return;
-    const el = listRef.current.querySelector(`[data-entry-id="${selectedId}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    if (!selectedId) return;
+    const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
+    if (rowIndex >= 0) {
+      virtuosoRef.current?.scrollIntoView({ index: rowIndex });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   // Build grouped actions for the action panel
@@ -439,17 +463,6 @@ export function ClipboardHistory() {
         <div className="relative w-[380px] shrink-0 border-r border-border">
           {/* Quick-paste gradient mask — single overlay for entire list right edge */}
           {isCommandHeld && <div className="quick-paste-mask" />}
-          <div
-            ref={listRef}
-            className="h-full overflow-y-auto"
-            onScroll={(e) => {
-              // Page in more history when scrolled near the bottom.
-              const el = e.currentTarget;
-              if (el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
-                loadMore();
-              }
-            }}
-          >
           {entries.length === 0
             ? (
                 <EmptyState
@@ -459,43 +472,45 @@ export function ClipboardHistory() {
                 />
               )
             : (
-                <div className="py-1">
-                  {Array.from(groupedEntries.entries()).map(([dateLabel, groupEntries]) => (
-                    <div key={dateLabel}>
-                      <div className="px-4 pt-3 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-                        {dateLabel === "Pinned" && <Pin size={10} className="shrink-0" />}
-                        {dateLabel}
-                      </div>
-                      {(groupEntries as ClipboardEntry[]).map((entry) => {
-                        // Compute the flat visible index for quick-paste badge
-                        const flatIdx = entries.indexOf(entry);
-                        const qpIndex = isCommandHeld && flatIdx >= 0 && flatIdx < 9
-                          ? flatIdx + 1
-                          : undefined;
-                        return (
-                          <ClipboardItem
-                            key={entry.id}
-                            entry={entry}
-                            isSelected={entry.id === selectedId}
-                            quickPasteIndex={qpIndex}
-                            onClick={() => setSelectedId(entry.id)}
-                            onDoubleClick={async () => {
-                              if (entry.content_type === "image" && entry.image_path) {
-                                pasteImageEntry(entry.image_path);
-                              } else if (entry.content_type === "file" && entry.file_paths) {
-                                pasteFileEntry(entry.file_paths);
-                              } else if (entry.text_content) {
-                                pasteEntry(entry.text_content);
-                              }
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
+                <Virtuoso
+                  ref={virtuosoRef}
+                  className="h-full"
+                  data={rows}
+                  endReached={() => loadMore()}
+                  increaseViewportBy={400}
+                  computeItemKey={(_, row) =>
+                    row.kind === "header" ? `h:${row.label}` : `i:${row.entry.id}`}
+                  itemContent={(_, row) => {
+                    if (row.kind === "header") {
+                      return (
+                        <div className="px-4 pt-3 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+                          {row.label === "Pinned" && <Pin size={10} className="shrink-0" />}
+                          {row.label}
+                        </div>
+                      );
+                    }
+                    const { entry, index } = row;
+                    const qpIndex = isCommandHeld && index < 9 ? index + 1 : undefined;
+                    return (
+                      <ClipboardItem
+                        entry={entry}
+                        isSelected={entry.id === selectedId}
+                        quickPasteIndex={qpIndex}
+                        onClick={() => setSelectedId(entry.id)}
+                        onDoubleClick={async () => {
+                          if (entry.content_type === "image" && entry.image_path) {
+                            pasteImageEntry(entry.image_path);
+                          } else if (entry.content_type === "file" && entry.file_paths) {
+                            pasteFileEntry(entry.file_paths);
+                          } else if (entry.text_content) {
+                            pasteEntry(entry.text_content);
+                          }
+                        }}
+                      />
+                    );
+                  }}
+                />
               )}
-          </div>
         </div>
 
         {/* Right panel — preview */}
