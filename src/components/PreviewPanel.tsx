@@ -92,9 +92,8 @@ function FilePreview({ filePath }: { filePath: string }) {
   switch (category) {
     case "image":
       return (
-        <img
-          src={src}
-          alt=""
+        <AssetImage
+          filePath={filePath}
           className="max-w-full max-h-full object-contain rounded-lg shadow-md"
         />
       );
@@ -212,6 +211,37 @@ export function NativeFileIcon({ filePath, className = "w-16 h-16" }: { filePath
   );
 }
 
+/**
+ * Renders an image from a local file via the asset protocol, falling back to a
+ * native file icon + notice when the file can't be loaded (e.g. it was deleted
+ * or moved after being copied).
+ */
+function AssetImage({ filePath, alt = "", className }: { filePath: string; alt?: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    const fileName = filePath.split("/").pop() || filePath;
+    return (
+      <div className="flex flex-col items-center justify-center gap-4">
+        <NativeFileIcon filePath={filePath} className="w-32 h-32 drop-shadow-md" />
+        <div className="text-center px-4">
+          <div className="text-[14px] font-medium text-text-primary break-all">{fileName}</div>
+          <div className="text-[12px] text-text-tertiary mt-1">无法预览(文件可能已被移动或删除)</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={convertFileSrc(filePath)}
+      alt={alt}
+      className={className}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 interface PreviewPanelProps {
   entry: ClipboardEntry | null;
 }
@@ -266,8 +296,8 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
         {isImage
           ? (
               <div className="flex items-center justify-center h-full">
-                <img
-                  src={convertFileSrc(entry.image_path!)}
+                <AssetImage
+                  filePath={entry.image_path!}
                   alt="Clipboard image"
                   className="max-w-full max-h-full object-contain rounded-lg shadow-md"
                 />

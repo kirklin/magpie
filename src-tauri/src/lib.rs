@@ -39,8 +39,11 @@ pub fn run() {
         .append(true)
         .open(&log_file);
 
+    // Silence tauri's asset-protocol "File does not exist" errors: clipboard
+    // history legitimately references files the user may have since deleted, so
+    // these are expected and handled in the UI with a fallback, not real errors.
     let mut builder = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info,magpie=debug")
+        env_logger::Env::default().default_filter_or("info,magpie=debug,tauri::protocol::asset=off")
     );
 
     if let Ok(file) = file {

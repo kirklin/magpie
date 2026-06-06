@@ -1,6 +1,7 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Pin } from "lucide-react";
+import { useState } from "react";
 import { getTypeIcon } from "../utils/classifier";
 import { NativeFileIcon } from "./PreviewPanel";
 
@@ -15,6 +16,9 @@ interface ClipboardItemProps {
 
 export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onDoubleClick }: ClipboardItemProps) {
   const typeIcon = getTypeIcon(entry.content_type);
+  // Falls back to a non-image icon when the referenced file/image can't load
+  // (e.g. the source file was deleted), instead of showing a broken thumbnail.
+  const [thumbFailed, setThumbFailed] = useState(false);
   const isImage = entry.content_type === "image" && entry.image_path;
   const isFile = entry.content_type === "file" && entry.file_paths;
   const isColor = entry.content_type === "color";
@@ -72,23 +76,25 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
       role="option"
       aria-selected={isSelected}
     >
-      {isImage
+      {(isImage && !thumbFailed)
         ? (
             <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
               <img
                 src={convertFileSrc(entry.image_path!)}
                 alt=""
                 className="w-full h-full object-cover"
+                onError={() => setThumbFailed(true)}
               />
             </div>
           )
-        : (isFile && fileImagePath)
+        : (isFile && fileImagePath && !thumbFailed)
             ? (
                 <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
                   <img
                     src={convertFileSrc(fileImagePath)}
                     alt=""
                     className="w-full h-full object-cover"
+                    onError={() => setThumbFailed(true)}
                   />
                 </div>
               )
