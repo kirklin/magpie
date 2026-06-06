@@ -236,16 +236,34 @@ pub fn run() {
             };
 
             let handle_for_shortcut = app.handle().clone();
-            app.global_shortcut().on_shortcut(
+            let register = app.global_shortcut().on_shortcut(
                 shortcut_key.as_str(),
                 move |_app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         toggle_window(&handle_for_shortcut);
                     }
                 },
-            )?;
+            );
 
-            log::info!("Global shortcut registered: {}", shortcut_key);
+            // A bad/unregisterable persisted shortcut must NOT prevent launch.
+            // Fall back to the default instead of propagating (which would panic).
+            if let Err(e) = register {
+                log::error!(
+                    "Failed to register saved shortcut '{}': {}; falling back to default",
+                    shortcut_key, e
+                );
+                let handle_fallback = app.handle().clone();
+                let _ = app.global_shortcut().on_shortcut(
+                    "CmdOrCtrl+Shift+V",
+                    move |_app, _shortcut, event| {
+                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            toggle_window(&handle_fallback);
+                        }
+                    },
+                );
+            } else {
+                log::info!("Global shortcut registered: {}", shortcut_key);
+            }
 
             // Delay clipboard monitor start to let DB initialize
             let monitor_handle = app.handle().clone();

@@ -133,13 +133,27 @@ export const useSettingsStore = create<SettingsStore>(set => ({
   },
 
   updateSetting: async (key, value) => {
+    const previous = useSettingsStore.getState().settings[key];
+
+    // Optimistic UI update.
+    set(state => ({
+      settings: {
+        ...state.settings,
+        [key]: value,
+      },
+    }));
+
     try {
-      set(state => ({
-        settings: {
-          ...state.settings,
-          [key]: value,
-        },
-      }));
+      // Run side effects that can FAIL (and that validate the value) BEFORE
+      // persisting, so a rejected value is never written to disk. A bad
+      // global_shortcut persisted here would otherwise break the next launch.
+      if (key === "global_shortcut") {
+        await invoke("update_global_shortcut", { shortcut: value });
+      }
+
+      if (key === "show_menu_bar_icon") {
+        await invoke("set_tray_visible", { visible: value });
+      }
 
       if (!storeInstance) {
         storeInstance = await Store.load("settings.json", { defaults: {}, autoSave: true });
@@ -148,21 +162,19 @@ export const useSettingsStore = create<SettingsStore>(set => ({
       await storeInstance.set(key, value);
       await storeInstance.save();
 
-      // Side effects — re-apply appearance for theme or accent changes
-      const currentSettings = useSettingsStore.getState().settings;
-
+      // Appearance side effects can't fail — apply after persisting.
       if (key === "theme" || key === "accent_color") {
+        const currentSettings = useSettingsStore.getState().settings;
         applyAppearance(currentSettings.theme, currentSettings.accent_color);
       }
-
-      if (key === "global_shortcut") {
-        await invoke("update_global_shortcut", { shortcut: value });
-      }
-
-      if (key === "show_menu_bar_icon") {
-        await invoke("set_tray_visible", { visible: value });
-      }
     } catch (err) {
+      // Revert the optimistic update so a rejected value isn't shown or saved.
+      set(state => ({
+        settings: {
+          ...state.settings,
+          [key]: previous,
+        },
+      }));
       console.error(`Failed to update setting ${key}:`, err);
       throw err;
     }
