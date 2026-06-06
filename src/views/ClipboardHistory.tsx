@@ -25,6 +25,7 @@ export function ClipboardHistory() {
     setSearchQuery,
     setSelectedId,
     fetchEntries,
+    loadMore,
     pasteEntry,
     copyEntry,
     pasteAsPlainText,
@@ -241,6 +242,8 @@ export function ClipboardHistory() {
           e.preventDefault();
           const nextIndex = Math.min(currentIndex + 1, entries.length - 1);
           setSelectedId(entries[nextIndex]?.id ?? null);
+          // Page in more when navigating near the end of the loaded set.
+          if (nextIndex >= entries.length - 5) loadMore();
           break;
         }
         case "ArrowUp": {
@@ -347,7 +350,7 @@ export function ClipboardHistory() {
       setSelectedId, handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
       handleDelete, handleTogglePin, handleEditContent, handleOpenUrl,
       handleAppendToClipboard, handleSaveAsFile, handleClearHistory, navigateTo,
-      quickPasteByIndex,
+      quickPasteByIndex, loadMore,
     ],
   );
 
@@ -426,7 +429,17 @@ export function ClipboardHistory() {
         <div className="relative w-[380px] shrink-0 border-r border-border">
           {/* Quick-paste gradient mask — single overlay for entire list right edge */}
           {isCommandHeld && <div className="quick-paste-mask" />}
-          <div ref={listRef} className="h-full overflow-y-auto">
+          <div
+            ref={listRef}
+            className="h-full overflow-y-auto"
+            onScroll={(e) => {
+              // Page in more history when scrolled near the bottom.
+              const el = e.currentTarget;
+              if (el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
+                loadMore();
+              }
+            }}
+          >
           {entries.length === 0
             ? (
                 <EmptyState

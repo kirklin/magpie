@@ -29,12 +29,17 @@ export interface ClipboardQuery {
   offset: number;
 }
 
+/** Number of entries fetched per page. The list pages in more on scroll. */
+export const PAGE_SIZE = 100;
+
 interface ClipboardStore {
   entries: ClipboardEntry[];
   selectedId: number | null;
   searchQuery: string;
   activeFilter: string | null;
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   activeApp: string;
 
   setActiveApp: (app: string) => void;
@@ -42,6 +47,7 @@ interface ClipboardStore {
   setActiveFilter: (filter: string | null) => void;
   setSelectedId: (id: number | null) => void;
   fetchEntries: () => Promise<void>;
+  loadMore: () => Promise<void>;
   deleteEntry: (id: number) => Promise<void>;
   togglePin: (id: number) => Promise<void>;
   clearHistory: () => Promise<void>;
@@ -69,6 +75,8 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   searchQuery: "",
   activeFilter: null,
   isLoading: false,
+  isLoadingMore: false,
+  hasMore: true,
   activeApp: "Active App",
 
   setActiveApp: app => set({ activeApp: app }),
@@ -86,6 +94,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
   setSelectedId: id => set({ selectedId: id }),
 
+  // Fetch the first page (resets pagination). Called on mount, search, filter.
   fetchEntries: async () => {
     const { searchQuery, activeFilter } = get();
     set({ isLoading: true });
@@ -94,14 +103,45 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         search: searchQuery || null,
         content_type: activeFilter,
         pinned_only: false,
-        limit: 200,
+        limit: PAGE_SIZE,
         offset: 0,
       };
       const entries = await invoke<ClipboardEntry[]>("get_clipboard_entries", { query });
-      set({ entries, isLoading: false });
+      set({ entries, isLoading: false, hasMore: entries.length === PAGE_SIZE });
     } catch (e) {
       console.error("Failed to fetch clipboard entries:", e);
       set({ isLoading: false });
+    }
+  },
+
+  // Append the next page. Triggered when the list is scrolled near the bottom,
+  // so the whole history is reachable rather than capped at the first page.
+  loadMore: async () => {
+    const { searchQuery, activeFilter, entries, hasMore, isLoadingMore, isLoading } = get();
+    if (!hasMore || isLoadingMore || isLoading) return;
+    set({ isLoadingMore: true });
+    try {
+      const query: ClipboardQuery = {
+        search: searchQuery || null,
+        content_type: activeFilter,
+        pinned_only: false,
+        limit: PAGE_SIZE,
+        offset: entries.length,
+      };
+      const page = await invoke<ClipboardEntry[]>("get_clipboard_entries", { query });
+      set((state) => {
+        // Dedup by id in case the underlying order shifted between pages.
+        const seen = new Set(state.entries.map(e => e.id));
+        const fresh = page.filter(e => !seen.has(e.id));
+        return {
+          entries: [...state.entries, ...fresh],
+          isLoadingMore: false,
+          hasMore: page.length === PAGE_SIZE,
+        };
+      });
+    } catch (e) {
+      console.error("Failed to load more clipboard entries:", e);
+      set({ isLoadingMore: false });
     }
   },
 
