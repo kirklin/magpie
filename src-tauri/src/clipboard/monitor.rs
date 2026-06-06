@@ -143,6 +143,10 @@ pub fn start_monitor(app_handle: AppHandle) {
                                 if let Err(e) = app.emit("clipboard://changed", payload) {
                                     log::error!("[Clipboard] Failed to emit event: {}", e);
                                 }
+                                // Enforce history size/retention limits after each capture.
+                                if let Err(e) = super::retention::prune_history(&app).await {
+                                    log::warn!("[Retention] prune failed: {}", e);
+                                }
                             }
                             Ok(Ok(None)) => {
                                 // Nothing storable on the pasteboard — still commit so
