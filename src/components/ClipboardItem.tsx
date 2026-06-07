@@ -1,6 +1,6 @@
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Pin } from "lucide-react";
+import { Files, Pin } from "lucide-react";
 import { useState } from "react";
 import { getTypeIcon } from "../utils/classifier";
 import { NativeFileIcon } from "./PreviewPanel";
@@ -65,6 +65,8 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
     }
   }
 
+  const isMultiFile = isFile && parsedPaths.length > 1;
+
   return (
     <div
       data-entry-id={entry.id}
@@ -89,17 +91,26 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
               />
             </div>
           )
-        : (isFile && fileImagePath && !thumbFailed)
+        : isMultiFile
             ? (
-                <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
-                  <img
-                    src={convertFileSrc(fileImagePath)}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    onError={() => setThumbFailed(true)}
-                  />
-                </div>
+                <span className={`w-6 h-6 flex items-center justify-center shrink-0 ${
+                  isSelected ? "text-text-primary" : "text-text-tertiary"
+                }`}
+                >
+                  <Files size={18} strokeWidth={2} />
+                </span>
               )
+            : (isFile && fileImagePath && !thumbFailed)
+                ? (
+                    <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
+                      <img
+                        src={convertFileSrc(fileImagePath)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => setThumbFailed(true)}
+                      />
+                    </div>
+                  )
             : (isFile && parsedPaths && parsedPaths.length === 1)
                 ? (
                     <div className="shrink-0 flex items-center justify-center">
