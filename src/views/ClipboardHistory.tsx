@@ -57,6 +57,7 @@ export function ClipboardHistory() {
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const visibleRange = useRef({ startIndex: 0, endIndex: 0 });
   const searchBarRef = useRef<SearchBarRef>(null);
 
   // Command-hold quick-paste feature
@@ -403,20 +404,21 @@ export function ClipboardHistory() {
     }
   }, [entries, selectedId, setSelectedId]);
 
-  // Scroll selected item into view on keyboard navigation (via the virtual list).
-  // Depends only on selectedId so appending more pages doesn't yank the scroll.
+  // Scroll the keyboard-selected row into view. We compare against the rendered
+  // range (tracked via Virtuoso's rangeChanged, with no overscan so rendered ==
+  // visible) and only scroll when the row is above or below it — scrolling to
+  // `start`/`end` so it lands fully in view. Depends only on selectedId so
+  // appending more pages doesn't yank the scroll.
   useEffect(() => {
     if (!selectedId) return;
     const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
     if (rowIndex < 0) return;
-    // Defer to the next frame so Virtuoso has rendered/measured the row before
-    // scrolling — otherwise the newly-selected bottom row stays just out of view
-    // until the user scrolls manually. Omitting `align` makes Virtuoso do the
-    // minimal scroll needed to bring the row fully into view.
-    const raf = requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollIntoView({ index: rowIndex, behavior: "auto" });
-    });
-    return () => cancelAnimationFrame(raf);
+    const { startIndex, endIndex } = visibleRange.current;
+    if (rowIndex <= startIndex) {
+      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "start" });
+    } else if (rowIndex >= endIndex) {
+      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "end" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -483,7 +485,9 @@ export function ClipboardHistory() {
                   className="h-full"
                   data={rows}
                   endReached={() => loadMore()}
-                  increaseViewportBy={400}
+                  rangeChanged={(range) => {
+                    visibleRange.current = range;
+                  }}
                   computeItemKey={(_, row) =>
                     row.kind === "header" ? `h:${row.label}` : `i:${row.entry.id}`}
                   itemContent={(_, row) => {
