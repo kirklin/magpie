@@ -306,8 +306,10 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
           : isFile
             ? (
                 <div className="flex flex-col h-full">
-                  {/* File preview area */}
-                  {previewableFile ? (
+                  {/* File preview area. Only preview inline for a SINGLE file —
+                      a multi-file entry must show the file list, not the content
+                      of whichever file happens to be previewable. */}
+                  {(filePaths.length === 1 && previewableFile) ? (
                     <div className="flex items-center justify-center flex-1 min-h-0">
                       <FilePreview filePath={previewableFile} />
                     </div>
