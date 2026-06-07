@@ -34,7 +34,9 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
         if (parsedPaths.length === 1) {
           displayName = parsedPaths[0].split("/").pop() || parsedPaths[0];
         } else {
-          displayName = `${parsedPaths.length} 个文件`;
+          // Show the actual file names (comma-joined) rather than a bare count;
+          // the row truncates with an ellipsis when it's too long.
+          displayName = parsedPaths.map(p => p.split("/").pop() || p).join("、");
         }
       }
       // Check if any file can show a visual thumbnail (images & videos)
@@ -123,7 +125,7 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
                     )}
 
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] leading-tight truncate">{displayName}</div>
+        <div className="text-[13px] leading-tight truncate" title={displayName}>{displayName}</div>
       </div>
 
       {entry.is_pinned && (
