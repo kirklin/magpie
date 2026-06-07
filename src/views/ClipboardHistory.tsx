@@ -414,9 +414,10 @@ export function ClipboardHistory() {
     const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
     if (rowIndex < 0) return;
     const { startIndex, endIndex } = visibleRange.current;
-    // Keep a row of margin around the selected row so it lands fully in view
-    // (with a peek of the adjacent row) rather than flush against the edge.
-    const SCROLL_MARGIN = 48;
+    // Small margin so the selected row lands fully in view at the edge without
+    // being cut, but not so large that a whole extra row shows past it (which
+    // makes the selected row look like the second-to-last).
+    const SCROLL_MARGIN = 24;
     if (rowIndex <= startIndex) {
       virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "start", offset: -SCROLL_MARGIN });
     } else if (rowIndex >= endIndex) {
