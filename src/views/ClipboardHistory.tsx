@@ -414,10 +414,13 @@ export function ClipboardHistory() {
     const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
     if (rowIndex < 0) return;
     const { startIndex, endIndex } = visibleRange.current;
+    // Keep a row of margin around the selected row so it lands fully in view
+    // (with a peek of the adjacent row) rather than flush against the edge.
+    const SCROLL_MARGIN = 48;
     if (rowIndex <= startIndex) {
-      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "start" });
+      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "start", offset: -SCROLL_MARGIN });
     } else if (rowIndex >= endIndex) {
-      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "end" });
+      virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "end", offset: SCROLL_MARGIN });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
