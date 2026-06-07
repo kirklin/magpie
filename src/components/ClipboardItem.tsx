@@ -43,8 +43,10 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
             : names.join("、");
         }
       }
-      // Check if any file can show a visual thumbnail (images & videos)
-      const visualExts = new Set([
+      // Only real images get an inline <img> thumbnail. Videos are intentionally
+      // excluded: an <img> with a video src makes the browser fetch the entire
+      // (possibly huge) video file just to fail, which made scrolling janky.
+      const imageExts = new Set([
         ".png",
         ".jpg",
         ".jpeg",
@@ -55,12 +57,8 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
         ".heic",
         ".avif",
         ".svg",
-        ".mp4",
-        ".mov",
-        ".webm",
-        ".m4v",
       ]);
-      const thumbPath = parsedPaths.find(p => visualExts.has(p.substring(p.lastIndexOf(".")).toLowerCase()));
+      const thumbPath = parsedPaths.find(p => imageExts.has(p.substring(p.lastIndexOf(".")).toLowerCase()));
       if (thumbPath) {
         fileImagePath = thumbPath;
       }
