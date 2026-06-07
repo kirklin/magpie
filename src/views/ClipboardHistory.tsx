@@ -408,9 +408,15 @@ export function ClipboardHistory() {
   useEffect(() => {
     if (!selectedId) return;
     const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
-    if (rowIndex >= 0) {
-      virtuosoRef.current?.scrollIntoView({ index: rowIndex });
-    }
+    if (rowIndex < 0) return;
+    // Defer to the next frame so Virtuoso has rendered/measured the row before
+    // scrolling — otherwise the newly-selected bottom row stays just out of view
+    // until the user scrolls manually. Omitting `align` makes Virtuoso do the
+    // minimal scroll needed to bring the row fully into view.
+    const raf = requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollIntoView({ index: rowIndex, behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
