@@ -173,17 +173,33 @@ function NativeAppIcon({ bundleId, appName }: { bundleId: string; appName: strin
   );
 }
 
+// Module-level cache of resolved file icons (path -> base64 data URL). Avoids a
+// fresh get_file_icon IPC call every time a row re-mounts while scrolling the
+// virtualized list, which otherwise causes noticeable jank.
+const fileIconCache = new Map<string, string>();
+
 // Async component to load native file icon from macOS
 export function NativeFileIcon({ filePath, className = "w-16 h-16" }: { filePath: string; className?: string }) {
-  const [iconSrc, setIconSrc] = useState<string | null>(null);
+  // Initialise from cache so a re-mounted row paints its icon synchronously.
+  const [iconSrc, setIconSrc] = useState<string | null>(() => fileIconCache.get(filePath) ?? null);
 
   useEffect(() => {
     if (!filePath) {
       return;
     }
+    const cached = fileIconCache.get(filePath);
+    if (cached) {
+      setIconSrc(cached);
+      return;
+    }
     let cancelled = false;
     invoke<string>("get_file_icon", { filePath })
       .then((base64) => {
+        // Bound the cache so a long session can't grow it without limit.
+        if (fileIconCache.size > 400) {
+          fileIconCache.clear();
+        }
+        fileIconCache.set(filePath, base64);
         if (!cancelled) {
           setIconSrc(base64);
         }
