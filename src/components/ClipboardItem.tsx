@@ -34,9 +34,13 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
         if (parsedPaths.length === 1) {
           displayName = parsedPaths[0].split("/").pop() || parsedPaths[0];
         } else {
-          // Show the actual file names (comma-joined) rather than a bare count;
-          // the row truncates with an ellipsis when it's too long.
-          displayName = parsedPaths.map(p => p.split("/").pop() || p).join("、");
+          // Show the first few file names, then cap with a count — otherwise
+          // copying e.g. 100 files would build a huge label and hover title.
+          const names = parsedPaths.map(p => p.split("/").pop() || p);
+          const MAX_NAMES = 3;
+          displayName = names.length > MAX_NAMES
+            ? `${names.slice(0, MAX_NAMES).join("、")} 等 ${names.length} 个文件`
+            : names.join("、");
         }
       }
       // Check if any file can show a visual thumbnail (images & videos)
