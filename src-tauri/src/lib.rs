@@ -200,6 +200,33 @@ pub fn run() {
                 let _ = window.set_decorations(false);
                 let _ = window.set_always_on_top(true);
 
+                // Round the NATIVE window corners. The window is frameless and
+                // transparent and only the CSS content is rounded, so the square
+                // native content layer pokes past the rounded corners, leaving an
+                // opaque notch at each corner (visible in both light and dark
+                // mode). Clipping the content view's layer to a rounded rect and
+                // recomputing the shadow makes the whole window corner clean.
+                #[cfg(target_os = "macos")]
+                {
+                    use objc2::runtime::AnyObject;
+                    if let Ok(ns_window) = window.ns_window() {
+                        let ns_window = ns_window as *mut AnyObject;
+                        unsafe {
+                            let content_view: *mut AnyObject = objc2::msg_send![ns_window, contentView];
+                            if !content_view.is_null() {
+                                let _: () = objc2::msg_send![content_view, setWantsLayer: true];
+                                let layer: *mut AnyObject = objc2::msg_send![content_view, layer];
+                                if !layer.is_null() {
+                                    // Matches the CSS `rounded-2xl` (16px) on the root element.
+                                    let _: () = objc2::msg_send![layer, setCornerRadius: 16.0f64];
+                                    let _: () = objc2::msg_send![layer, setMasksToBounds: true];
+                                }
+                            }
+                            let _: () = objc2::msg_send![ns_window, invalidateShadow];
+                        }
+                    }
+                }
+
                 // Auto-hide on blur (lose focus), unless SkipBlurHide is set
                 let window_clone = window.clone();
                 let handle_for_blur = app.handle().clone();
