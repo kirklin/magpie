@@ -2,11 +2,13 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use sha2::{Sha256, Digest};
+use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_sql::{DbInstances, DbPool};
+use tauri_plugin_sql::DbInstances;
 
 use super::classifier::ContentClassifier;
 use crate::database::pool::get_pool;
+use crate::error::AppError;
 
 /// Clipboard monitor state shared across threads
 pub struct ClipboardMonitorState {
@@ -492,6 +494,84 @@ fn read_file_urls_from_pasteboard(app_handle: &AppHandle) -> Vec<String> {
 }
 
 /// Store a file clipboard entry
+/// The DB-authoritative fields of a stored entry, read back via RETURNING.
+/// On a dedup hit these reflect the ORIGINAL row (created_at, is_pinned,
+/// source_app, source_app_name are not overwritten), which is exactly the
+/// behavior the old SELECT-then-UPDATE produced.
+struct UpsertResult {
+    id: i64,
+    created_at: String,
+    accessed_at: String,
+    access_count: i64,
+    is_pinned: bool,
+    source_app: Option<String>,
+    source_app_name: Option<String>,
+    byte_size: i64,
+}
+
+/// Insert a new clipboard entry, or on a content_hash conflict bump its
+/// accessed_at / access_count / byte_size — atomically, in one statement.
+/// This replaces the racy SELECT-then-INSERT (two concurrent identical captures
+/// could both miss the SELECT and double-insert; UNIQUE(content_hash) + ON
+/// CONFLICT closes that window). DO UPDATE touches ONLY accessed_at/access_count/
+/// byte_size, so created_at/is_pinned/source_app/source_app_name/content keep
+/// their original values, and every payload field comes from RETURNING.
+#[allow(clippy::too_many_arguments)]
+async fn upsert_entry(
+    pool: &SqlitePool,
+    content_type: &str,
+    text_content: Option<&str>,
+    html_content: Option<&str>,
+    image_path: Option<&str>,
+    file_paths: Option<&str>,
+    content_hash: &str,
+    content_preview: &str,
+    byte_size: i64,
+    source_app: Option<&str>,
+    source_app_name: Option<&str>,
+    now: &str,
+) -> Result<UpsertResult, AppError> {
+    let (id, created_at, accessed_at, access_count, is_pinned, ret_source_app, ret_source_app_name, ret_byte_size):
+        (i64, String, String, i64, bool, Option<String>, Option<String>, i64) = sqlx::query_as(
+        "INSERT INTO clipboard_entries
+            (content_type, text_content, html_content, image_path, file_paths,
+             content_hash, content_preview, byte_size, source_app, source_app_name,
+             created_at, accessed_at, access_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+         ON CONFLICT(content_hash) DO UPDATE SET
+            accessed_at = excluded.accessed_at,
+            access_count = clipboard_entries.access_count + 1,
+            byte_size = excluded.byte_size
+         RETURNING id, created_at, accessed_at, access_count, is_pinned,
+                   source_app, source_app_name, byte_size",
+    )
+    .bind(content_type)
+    .bind(text_content)
+    .bind(html_content)
+    .bind(image_path)
+    .bind(file_paths)
+    .bind(content_hash)
+    .bind(content_preview)
+    .bind(byte_size)
+    .bind(source_app)
+    .bind(source_app_name)
+    .bind(now)
+    .bind(now)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(UpsertResult {
+        id,
+        created_at,
+        accessed_at,
+        access_count,
+        is_pinned,
+        source_app: ret_source_app,
+        source_app_name: ret_source_app_name,
+        byte_size: ret_byte_size,
+    })
+}
+
 async fn store_file_entry(
     app_handle: &AppHandle,
     file_paths: Vec<String>,
@@ -524,77 +604,40 @@ async fn store_file_entry(
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
-    // Insert into database
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    // Upsert into database (atomic dedup on content_hash).
+    let pool = get_pool(app_handle).await.map_err(String::from)?;
+    let stored = upsert_entry(
+        &pool,
+        "file",
+        Some(&file_paths_text), // human-readable paths for search/display
+        None,
+        None,
+        Some(&file_paths_json),
+        &hash,
+        &preview,
+        byte_size,
+        source_app.as_deref(),
+        source_app_name.as_deref(),
+        &now,
+    )
+    .await
+    .map_err(String::from)?;
 
-    if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
-            DbPool::Sqlite(pool) => {
-                // Check for duplicate hash first
-                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
-                )
-                .bind(&hash)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| e.to_string())?;
-
-                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
-                    sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
-                    )
-                    .bind(&now)
-                    .bind(byte_size)
-                    .bind(existing_id)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
-                } else {
-                    let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, text_content, file_paths, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                    )
-                    .bind("file")
-                    .bind(&file_paths_text) // human-readable paths for search/display
-                    .bind(&file_paths_json)
-                    .bind(&hash)
-                    .bind(&preview)
-                    .bind(byte_size)
-                    .bind(&source_app)
-                    .bind(&source_app_name)
-                    .bind(&now)
-                    .bind(&now)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
-                }
-            }
-            #[allow(unreachable_patterns)]
-            _ => return Err("Unsupported database type".to_string()),
-        };
-
-        Ok(Some(ClipboardChangedPayload {
-            id,
-            content_type: "file".to_string(),
-            text_content: Some(file_paths_text),
-            content_preview: Some(preview),
-            image_path: None,
-            file_paths: Some(file_paths_json),
-            source_app: final_source_app,
-            source_app_name: final_source_app_name,
-            is_pinned,
-            created_at,
-            accessed_at: now,
-            access_count,
-            byte_size,
-        }))
-    } else {
-        Err("Database not initialized".to_string())
-    }
+    Ok(Some(ClipboardChangedPayload {
+        id: stored.id,
+        content_type: "file".to_string(),
+        text_content: Some(file_paths_text),
+        content_preview: Some(preview),
+        image_path: None,
+        file_paths: Some(file_paths_json),
+        source_app: stored.source_app,
+        source_app_name: stored.source_app_name,
+        is_pinned: stored.is_pinned,
+        created_at: stored.created_at,
+        accessed_at: stored.accessed_at,
+        access_count: stored.access_count,
+        byte_size: stored.byte_size,
+    }))
 }
 
 /// Store a text clipboard entry. `html` carries the original HTML markup when
@@ -620,78 +663,40 @@ async fn store_text_entry(
     // Get the source app (frontmost app)
     let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
-    // Insert into database
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    // Upsert into database (atomic dedup on content_hash).
+    let pool = get_pool(app_handle).await.map_err(String::from)?;
+    let stored = upsert_entry(
+        &pool,
+        content_type,
+        Some(&text),
+        html.as_deref(),
+        None,
+        None,
+        &hash,
+        &preview,
+        byte_size,
+        source_app.as_deref(),
+        source_app_name.as_deref(),
+        &now,
+    )
+    .await
+    .map_err(String::from)?;
 
-    if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
-            DbPool::Sqlite(pool) => {
-                // Check for duplicate hash first
-                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
-                )
-                .bind(&hash)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| e.to_string())?;
-
-                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
-                    // Update accessed_at and access_count
-                    sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
-                    )
-                    .bind(&now)
-                    .bind(byte_size)
-                    .bind(existing_id)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    
-                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
-                } else {
-                    let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, text_content, html_content, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                    )
-                    .bind(content_type)
-                    .bind(&text)
-                    .bind(&html)
-                    .bind(&hash)
-                    .bind(&preview)
-                    .bind(byte_size)
-                    .bind(&source_app)
-                    .bind(&source_app_name)
-                    .bind(&now)
-                    .bind(&now)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
-                }
-            }
-            #[allow(unreachable_patterns)]
-            _ => return Err("Unsupported database type".to_string()),
-        };
-
-        Ok(Some(ClipboardChangedPayload {
-            id,
-            content_type: content_type.to_string(),
-            text_content: Some(text),
-            content_preview: Some(preview),
-            image_path: None,
-            file_paths: None,
-            source_app: final_source_app,
-            source_app_name: final_source_app_name,
-            is_pinned,
-            created_at,
-            accessed_at: now,
-            access_count,
-            byte_size,
-        }))
-    } else {
-        Err("Database not initialized".to_string())
-    }
+    Ok(Some(ClipboardChangedPayload {
+        id: stored.id,
+        content_type: content_type.to_string(),
+        text_content: Some(text),
+        content_preview: Some(preview),
+        image_path: None,
+        file_paths: None,
+        source_app: stored.source_app,
+        source_app_name: stored.source_app_name,
+        is_pinned: stored.is_pinned,
+        created_at: stored.created_at,
+        accessed_at: stored.accessed_at,
+        access_count: stored.access_count,
+        byte_size: stored.byte_size,
+    }))
 }
 
 /// Store an image clipboard entry
@@ -734,76 +739,42 @@ async fn store_image_entry(
 
     let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
-    // Insert into database
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    // Upsert into database (atomic dedup on content_hash). The PNG is already
+    // written above; its filename is the content hash, so a dedup hit references
+    // the byte-identical file that's already on disk.
+    let pool = get_pool(app_handle).await.map_err(String::from)?;
+    let stored = upsert_entry(
+        &pool,
+        "image",
+        None,
+        None,
+        Some(&file_path_str),
+        None,
+        &hash,
+        &preview,
+        byte_size,
+        source_app.as_deref(),
+        source_app_name.as_deref(),
+        &now,
+    )
+    .await
+    .map_err(String::from)?;
 
-    if let Some(db) = instances.get("sqlite:magpie.db") {
-        let (id, created_at, access_count, is_pinned, final_source_app, final_source_app_name) = match db {
-            DbPool::Sqlite(pool) => {
-                // Check for duplicate hash
-                let existing: Option<(i64, String, i64, bool, Option<String>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, created_at, access_count, is_pinned, source_app, source_app_name FROM clipboard_entries WHERE content_hash = ? LIMIT 1",
-                )
-                .bind(&hash)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| e.to_string())?;
-
-                if let Some((existing_id, created_at, access_count, is_pinned, ext_source_app, ext_source_app_name)) = existing {
-                    sqlx::query(
-                        "UPDATE clipboard_entries SET accessed_at = ?, access_count = access_count + 1, byte_size = ? WHERE id = ?",
-                    )
-                    .bind(&now)
-                    .bind(byte_size)
-                    .bind(existing_id)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    
-                    (existing_id, created_at, access_count + 1, is_pinned, ext_source_app, ext_source_app_name)
-                } else {
-                    let result = sqlx::query(
-                        "INSERT INTO clipboard_entries (content_type, image_path, content_hash, content_preview, byte_size, source_app, source_app_name, created_at, accessed_at, access_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                    )
-                    .bind("image")
-                    .bind(&file_path_str)
-                    .bind(&hash)
-                    .bind(&preview)
-                    .bind(byte_size)
-                    .bind(&source_app)
-                    .bind(&source_app_name)
-                    .bind(&now)
-                    .bind(&now)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    
-                    (result.last_insert_rowid(), now.clone(), 1, false, source_app, source_app_name)
-                }
-            }
-            #[allow(unreachable_patterns)]
-            _ => return Err("Unsupported database type".to_string()),
-        };
-
-        Ok(Some(ClipboardChangedPayload {
-            id,
-            content_type: "image".to_string(),
-            text_content: None,
-            content_preview: Some(preview),
-            image_path: Some(file_path_str),
-            file_paths: None,
-            source_app: final_source_app,
-            source_app_name: final_source_app_name,
-            is_pinned,
-            created_at,
-            accessed_at: now,
-            access_count,
-            byte_size,
-        }))
-    } else {
-        Err("Database not initialized".to_string())
-    }
+    Ok(Some(ClipboardChangedPayload {
+        id: stored.id,
+        content_type: "image".to_string(),
+        text_content: None,
+        content_preview: Some(preview),
+        image_path: Some(file_path_str),
+        file_paths: None,
+        source_app: stored.source_app,
+        source_app_name: stored.source_app_name,
+        is_pinned: stored.is_pinned,
+        created_at: stored.created_at,
+        accessed_at: stored.accessed_at,
+        access_count: stored.access_count,
+        byte_size: stored.byte_size,
+    }))
 }
 
 /// Encode RGBA bytes into a (properly compressed) PNG file using the `png` crate.
@@ -875,5 +846,57 @@ async fn get_frontmost_app_async(app_handle: &AppHandle) -> (Option<String>, Opt
     #[cfg(not(target_os = "macos"))]
     {
         (None, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use crate::database::repository::get_migrations;
+
+    /// Single-connection in-memory pool with the v1 schema + v3 UNIQUE index
+    /// applied (so ON CONFLICT(content_hash) has an index to fire against).
+    async fn pool_with_schema() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        for v in [1_i64, 3] {
+            let sql = get_migrations().into_iter().find(|m| m.version == v).unwrap().sql;
+            sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+        }
+        pool
+    }
+
+    #[tokio::test]
+    async fn upsert_inserts_then_bumps_on_conflict_keeping_original_fields() {
+        let pool = pool_with_schema().await;
+
+        let first = upsert_entry(
+            &pool, "text", Some("hi"), None, None, None, "hash1", "hi", 2,
+            Some("com.a"), Some("AppA"), "2026-01-01 00:00:00",
+        ).await.unwrap();
+        assert_eq!(first.access_count, 1);
+        assert_eq!(first.source_app.as_deref(), Some("com.a"));
+
+        // Re-copy the SAME content from a DIFFERENT app at a later time: a dedup
+        // hit must keep the original id/created_at/source_app and bump the count,
+        // while refreshing accessed_at and byte_size.
+        let second = upsert_entry(
+            &pool, "text", Some("hi"), None, None, None, "hash1", "hi", 9,
+            Some("com.b"), Some("AppB"), "2026-02-02 00:00:00",
+        ).await.unwrap();
+        assert_eq!(second.id, first.id, "same row");
+        assert_eq!(second.access_count, 2, "access_count bumped, not reset to 1");
+        assert_eq!(second.created_at, first.created_at, "created_at preserved on hit");
+        assert_eq!(second.source_app.as_deref(), Some("com.a"), "original source_app preserved on hit");
+        assert_eq!(second.accessed_at, "2026-02-02 00:00:00", "accessed_at refreshed");
+        assert_eq!(second.byte_size, 9, "byte_size refreshed");
+
+        let (cnt,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard_entries")
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(cnt, 1, "still a single row");
     }
 }

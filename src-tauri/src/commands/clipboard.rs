@@ -906,23 +906,16 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
     let mut imported_count = 0u32;
 
     for entry in &export_data.entries {
-        // Check if entry with this content_hash already exists
-        let exists = sqlx::query("SELECT 1 FROM clipboard_entries WHERE content_hash = ?")
-            .bind(&entry.content_hash)
-            .fetch_optional(&pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if exists.is_some() {
-            continue; // Skip duplicate
-        }
-
-        sqlx::query(
+        // Insert, skipping rows whose content_hash already exists. ON CONFLICT
+        // DO NOTHING tolerates both pre-existing rows and duplicates within the
+        // import file; a conflict affects 0 rows, so it isn't counted.
+        let result = sqlx::query(
             "INSERT INTO clipboard_entries \
              (content_type, text_content, html_content, image_path, file_paths, \
               source_app, source_app_name, custom_name, is_pinned, is_favorite, \
               content_hash, content_preview, byte_size, created_at, accessed_at, access_count) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(content_hash) DO NOTHING"
         )
             .bind(&entry.content_type)
             .bind(&entry.text_content)
@@ -944,7 +937,9 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
             .await
             .map_err(|e| e.to_string())?;
 
-        imported_count += 1;
+        if result.rows_affected() > 0 {
+            imported_count += 1;
+        }
     }
 
     Ok(imported_count)
