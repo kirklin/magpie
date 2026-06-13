@@ -388,7 +388,7 @@ fn read_file_urls_from_pasteboard(app_handle: &AppHandle) -> Vec<String> {
     let dispatched = app_handle.run_on_main_thread(move || {
         use objc2_app_kit::NSPasteboard;
         use objc2_foundation::{NSString, NSArray, NSURL};
-        use objc2::rc::{autoreleasepool, Retained};
+        use objc2::rc::autoreleasepool;
 
         let result = autoreleasepool(|_| {
             let pasteboard = NSPasteboard::generalPasteboard();
@@ -406,18 +406,22 @@ fn read_file_urls_from_pasteboard(app_handle: &AppHandle) -> Vec<String> {
                 return vec![];
             }
 
-            // Method 1: Use NSFilenamesPboardType which returns actual file paths
+            // Method 1: Use NSFilenamesPboardType which returns actual file paths.
+            // propertyListForType returns an untyped object; downcast it (a runtime
+            // class check) instead of transmuting + unwrapping, so a malformed
+            // pasteboard falls through to Method 2 rather than risking UB on iter.
             let filenames_type = NSString::from_str("NSFilenamesPboardType");
-            if let Some(obj) = pasteboard.propertyListForType(&filenames_type) {
-                // SAFETY: NSFilenamesPboardType always returns an NSArray of NSString file paths
-                let raw_ptr = Retained::into_raw(obj) as *mut NSArray<NSString>;
-                let array: Retained<NSArray<NSString>> = unsafe { Retained::from_raw(raw_ptr).unwrap() };
-
+            if let Some(array) = pasteboard
+                .propertyListForType(&filenames_type)
+                .and_then(|obj| obj.downcast::<NSArray>().ok())
+            {
                 let mut paths: Vec<String> = Vec::new();
                 for item in array.iter() {
-                    let path = item.to_string();
-                    if !path.is_empty() {
-                        paths.push(path);
+                    if let Some(path) = item.downcast_ref::<NSString>() {
+                        let p = path.to_string();
+                        if !p.is_empty() {
+                            paths.push(p);
+                        }
                     }
                 }
 
