@@ -11,10 +11,6 @@ use super::classifier::ContentClassifier;
 pub struct ClipboardMonitorState {
     pub last_change_count: AtomicI64,
     pub is_running: std::sync::atomic::AtomicBool,
-    /// True while a capture (read + store) for a detected change is in flight.
-    /// Prevents the 50ms poller from spawning duplicate processing tasks for
-    /// the same clipboard change while a (potentially slow) read is pending.
-    pub is_processing: std::sync::atomic::AtomicBool,
 }
 
 impl Default for ClipboardMonitorState {
@@ -22,7 +18,6 @@ impl Default for ClipboardMonitorState {
         Self {
             last_change_count: AtomicI64::new(0),
             is_running: std::sync::atomic::AtomicBool::new(false),
-            is_processing: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -99,29 +94,44 @@ pub fn start_monitor(app_handle: AppHandle) {
 
         let classifier = Arc::new(classifier);
 
+        // Enforce history size/retention limits periodically, OFF the capture hot
+        // path. Pruning on every copy added DB latency that, combined with the old
+        // in-flight guard, dropped fast successive copies.
+        {
+            let app = app_handle.clone();
+            let running = Arc::clone(&state_clone);
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    if !running.is_running.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if let Err(e) = super::retention::prune_history(&app).await {
+                        log::warn!("[Retention] prune failed: {}", e);
+                    }
+                }
+            });
+        }
+
         loop {
             if !state_clone.is_running.load(Ordering::SeqCst) {
                 log::info!("Clipboard monitor stopped");
                 break;
             }
 
-            // Quick check: read the current pasteboard change count (an integer).
-            // Crucially we do NOT commit it here — the stored `last_change_count`
-            // is only advanced once the content has actually been captured, so a
-            // failed/timed-out read leaves the change pending and the next poll
-            // retries it instead of dropping the copy forever.
+            // Read the current pasteboard change count (an integer).
             if let Some(current) = current_change_count(&app_handle) {
                 let last = state_clone.last_change_count.load(Ordering::SeqCst);
-                // Only spawn a capture if the count changed AND no capture is
-                // already in flight (`swap(true)` atomically acquires the guard).
-                if current != last
-                    && current >= 0
-                    && !state_clone.is_processing.swap(true, Ordering::SeqCst)
-                {
+                if current != last && current >= 0 {
+                    // Claim the change immediately. This stops the next poll from
+                    // re-spawning a task for the same change (no task storm), while
+                    // still letting rapid successive copies each spawn their own
+                    // reader — serializing captures here (the old in-flight guard)
+                    // dropped fast successive copies, which is what regressed.
+                    state_clone.last_change_count.store(current, Ordering::SeqCst);
                     log::debug!("Pasteboard changeCount: {} -> {}", last, current);
+
                     // Spawn processing in a separate task so we NEVER block the poller.
-                    // DB writes, image encoding, and source app detection all happen
-                    // off the hot path.
                     let app = app_handle.clone();
                     let cls = classifier.clone();
                     let st = Arc::clone(&state_clone);
@@ -133,8 +143,6 @@ pub fn start_monitor(app_handle: AppHandle) {
 
                         match result {
                             Ok(Ok(Some(payload))) => {
-                                // Captured successfully — commit the change count.
-                                st.last_change_count.store(current, Ordering::SeqCst);
                                 log::info!("[Clipboard] New entry: type={}, preview={:?}, id={}",
                                     payload.content_type,
                                     payload.content_preview.as_deref().unwrap_or("?"),
@@ -143,29 +151,31 @@ pub fn start_monitor(app_handle: AppHandle) {
                                 if let Err(e) = app.emit("clipboard://changed", payload) {
                                     log::error!("[Clipboard] Failed to emit event: {}", e);
                                 }
-                                // Enforce history size/retention limits after each capture.
-                                if let Err(e) = super::retention::prune_history(&app).await {
-                                    log::warn!("[Retention] prune failed: {}", e);
-                                }
                             }
-                            Ok(Ok(None)) => {
-                                // Nothing storable on the pasteboard — still commit so
-                                // we don't retry the same un-capturable change forever.
-                                st.last_change_count.store(current, Ordering::SeqCst);
+                            // Nothing storable (unrecognized / concealed content):
+                            // leave the count claimed so we don't retry it forever.
+                            Ok(Ok(None)) => {}
+                            // Genuine failure/timeout: roll the count back so the next
+                            // poll retries this change — but only if no newer change
+                            // has been claimed since, so we never clobber a newer copy.
+                            Ok(Err(e)) => {
+                                let _ = st.last_change_count.compare_exchange(
+                                    current, last, Ordering::SeqCst, Ordering::SeqCst,
+                                );
+                                log::error!("[Clipboard] Process error (will retry): {}", e);
                             }
-                            // Transient failure / timeout: do NOT commit the count, so
-                            // the next poll sees the change again and retries.
-                            Ok(Err(e)) => log::error!("[Clipboard] Process error (will retry): {}", e),
-                            Err(_) => log::error!("[Clipboard] Process timed out (5s, will retry)"),
+                            Err(_) => {
+                                let _ = st.last_change_count.compare_exchange(
+                                    current, last, Ordering::SeqCst, Ordering::SeqCst,
+                                );
+                                log::error!("[Clipboard] Process timed out (5s, will retry)");
+                            }
                         }
-
-                        // Release the in-flight guard.
-                        st.is_processing.store(false, Ordering::SeqCst);
                     });
                 }
             }
 
-            // 50ms polling — safe because the check is just an integer comparison
+            // 50ms polling — the per-tick check is just an integer comparison
             // dispatched to the main thread. All heavy work is spawned above.
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
