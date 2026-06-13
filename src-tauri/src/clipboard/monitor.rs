@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_sql::{DbInstances, DbPool};
 
 use super::classifier::ContentClassifier;
+use crate::database::pool::get_pool;
 
 /// Clipboard monitor state shared across threads
 pub struct ClipboardMonitorState {
@@ -82,6 +83,21 @@ pub fn start_monitor(app_handle: AppHandle) {
             } else {
                 log::info!("Database already available");
             }
+        }
+
+        // Switch the database to WAL so the capture writer and the UI/retention
+        // readers don't block each other. WAL is a persistent file-header setting,
+        // so running it once on any pooled connection sticks for all current and
+        // future connections. It must be a runtime PRAGMA, NOT a migration: sqlx
+        // wraps each migration's SQL in a transaction and SQLite refuses to switch
+        // journal_mode inside one. (foreign_keys=ON and busy_timeout=5000 are
+        // already applied per-connection by sqlx's defaults, so only WAL is needed.)
+        match get_pool(&app_handle).await {
+            Ok(pool) => match sqlx::query("PRAGMA journal_mode=WAL;").fetch_optional(&pool).await {
+                Ok(_) => log::info!("[Monitor] journal_mode=WAL enabled"),
+                Err(e) => log::warn!("[Monitor] failed to enable WAL: {e}"),
+            },
+            Err(e) => log::warn!("[Monitor] could not acquire pool to enable WAL: {e}"),
         }
 
         // Ensure clipboard_images directory exists
