@@ -43,8 +43,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::clipboard::paste_and_keep_window,
         commands::clipboard::paste_image_and_keep_window,
         commands::clipboard::paste_file_and_keep_window,
-        commands::clipboard::export_clipboard_history,
-        commands::clipboard::import_clipboard_history,
+        commands::history_io::export_clipboard_history,
+        commands::history_io::import_clipboard_history,
         // Settings commands
         commands::settings::get_default_settings,
         commands::settings::update_global_shortcut,
