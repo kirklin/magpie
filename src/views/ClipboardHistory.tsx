@@ -120,14 +120,18 @@ export function ClipboardHistory() {
 
   const handlePaste = useCallback(async () => {
     if (!selectedEntry) return;
-    if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
-      pasteImageEntry(selectedEntry.image_path);
-    } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-      pasteFileEntry(selectedEntry.file_paths);
-    } else if (selectedEntry.text_content) {
-      pasteEntry(selectedEntry.text_content);
+    try {
+      if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
+        await pasteImageEntry(selectedEntry.image_path);
+      } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
+        await pasteFileEntry(selectedEntry.file_paths);
+      } else if (selectedEntry.text_content) {
+        await pasteEntry(selectedEntry.text_content);
+      }
+    } catch {
+      toast.add("Paste failed");
     }
-  }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry]);
+  }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
 
   const handleCopy = useCallback(async () => {
     if (!selectedEntry) return;
@@ -149,8 +153,12 @@ export function ClipboardHistory() {
 
   const handlePastePlainText = useCallback(async () => {
     if (!selectedEntry?.text_content) return;
-    pasteAsPlainText(selectedEntry.text_content);
-  }, [selectedEntry, pasteAsPlainText]);
+    try {
+      await pasteAsPlainText(selectedEntry.text_content);
+    } catch {
+      toast.add("Paste failed");
+    }
+  }, [selectedEntry, pasteAsPlainText, toast]);
 
   const handlePasteKeepWindow = useCallback(async () => {
     if (!selectedEntry) return;
@@ -236,14 +244,18 @@ export function ClipboardHistory() {
   const quickPasteByIndex = useCallback(async (index: number) => {
     const entry = entries[index];
     if (!entry) return;
-    if (entry.content_type === "image" && entry.image_path) {
-      pasteImageEntry(entry.image_path);
-    } else if (entry.content_type === "file" && entry.file_paths) {
-      pasteFileEntry(entry.file_paths);
-    } else if (entry.text_content) {
-      pasteEntry(entry.text_content);
+    try {
+      if (entry.content_type === "image" && entry.image_path) {
+        await pasteImageEntry(entry.image_path);
+      } else if (entry.content_type === "file" && entry.file_paths) {
+        await pasteFileEntry(entry.file_paths);
+      } else if (entry.text_content) {
+        await pasteEntry(entry.text_content);
+      }
+    } catch {
+      toast.add("Paste failed");
     }
-  }, [entries, pasteEntry, pasteFileEntry, pasteImageEntry]);
+  }, [entries, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -512,12 +524,16 @@ export function ClipboardHistory() {
                         quickPasteIndex={qpIndex}
                         onClick={() => setSelectedId(entry.id)}
                         onDoubleClick={async () => {
-                          if (entry.content_type === "image" && entry.image_path) {
-                            pasteImageEntry(entry.image_path);
-                          } else if (entry.content_type === "file" && entry.file_paths) {
-                            pasteFileEntry(entry.file_paths);
-                          } else if (entry.text_content) {
-                            pasteEntry(entry.text_content);
+                          try {
+                            if (entry.content_type === "image" && entry.image_path) {
+                              await pasteImageEntry(entry.image_path);
+                            } else if (entry.content_type === "file" && entry.file_paths) {
+                              await pasteFileEntry(entry.file_paths);
+                            } else if (entry.text_content) {
+                              await pasteEntry(entry.text_content);
+                            }
+                          } catch {
+                            toast.add("Paste failed");
                           }
                         }}
                       />

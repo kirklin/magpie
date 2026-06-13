@@ -264,6 +264,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_clipboard_entry", { text });
     } catch (e) {
       console.error("Failed to paste:", e);
+      throw e;
     }
   },
 
@@ -281,6 +282,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_as_plain_text", { text });
     } catch (e) {
       console.error("Failed to paste as plain text:", e);
+      throw e;
     }
   },
 
@@ -289,6 +291,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_file_entry", { filePathsJson });
     } catch (e) {
       console.error("Failed to paste file entry:", e);
+      throw e;
     }
   },
 
@@ -306,6 +309,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("paste_image_entry", { imagePath });
     } catch (e) {
       console.error("Failed to paste image entry:", e);
+      throw e;
     }
   },
 
