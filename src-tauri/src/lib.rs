@@ -1,6 +1,7 @@
 mod clipboard;
 mod commands;
 mod database;
+mod error;
 mod menu;
 mod tray;
 

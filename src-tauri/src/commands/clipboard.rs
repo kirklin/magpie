@@ -1,10 +1,10 @@
 use tauri::AppHandle;
-use tauri_plugin_sql::{DbInstances, DbPool};
 use tauri::Manager;
 use sqlx::Row;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::database::models::{ClipboardEntry, ClipboardQuery};
+use crate::database::pool::get_pool;
 use crate::clipboard::paste;
 
 #[tauri::command]
@@ -13,165 +13,145 @@ pub async fn get_clipboard_entries(
     app_handle: AppHandle,
     query: ClipboardQuery,
 ) -> Result<Vec<ClipboardEntry>, String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        let mut sql = String::from(
-            "SELECT id, content_type, text_content, html_content, image_path, file_paths, \
-             source_app, source_app_name, custom_name, is_pinned, is_favorite, content_hash, \
-             content_preview, byte_size, created_at, accessed_at, access_count \
-             FROM clipboard_entries WHERE 1=1"
-        );
-        let mut bind_values: Vec<String> = vec![];
+    let mut sql = String::from(
+        "SELECT id, content_type, text_content, html_content, image_path, file_paths, \
+         source_app, source_app_name, custom_name, is_pinned, is_favorite, content_hash, \
+         content_preview, byte_size, created_at, accessed_at, access_count \
+         FROM clipboard_entries WHERE 1=1",
+    );
+    let mut bind_values: Vec<String> = vec![];
 
-        if let Some(ref search) = query.search {
-            sql.push_str(" AND (text_content LIKE ? OR custom_name LIKE ? OR content_preview LIKE ?)");
-            let search_pattern = format!("%{}%", search);
-            bind_values.push(search_pattern.clone());
-            bind_values.push(search_pattern.clone());
-            bind_values.push(search_pattern);
-        }
-
-        if let Some(ref ct) = query.content_type {
-            sql.push_str(" AND content_type = ?");
-            bind_values.push(ct.clone());
-        }
-
-        if query.pinned_only {
-            sql.push_str(" AND is_pinned = 1");
-        }
-
-        // Pinned items first, then by most recently accessed
-        sql.push_str(" ORDER BY is_pinned DESC, accessed_at DESC");
-        sql.push_str(&format!(" LIMIT {} OFFSET {}", query.limit, query.offset));
-
-        let mut query_builder = sqlx::query(&sql);
-
-        for val in &bind_values {
-            query_builder = query_builder.bind(val);
-        }
-
-        let rows = query_builder
-            .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let entries: Vec<ClipboardEntry> = rows
-            .iter()
-            .map(|row| ClipboardEntry {
-                id: row.get("id"),
-                content_type: row.get("content_type"),
-                text_content: row.get("text_content"),
-                html_content: row.get("html_content"),
-                image_path: row.get("image_path"),
-                file_paths: row.get("file_paths"),
-                source_app: row.get("source_app"),
-                source_app_name: row.get("source_app_name"),
-                custom_name: row.get("custom_name"),
-                is_pinned: row.get("is_pinned"),
-                is_favorite: row.get("is_favorite"),
-                content_hash: row.get("content_hash"),
-                content_preview: row.get("content_preview"),
-                byte_size: row.get("byte_size"),
-                created_at: row.get("created_at"),
-                accessed_at: row.get("accessed_at"),
-                access_count: row.get("access_count"),
-            })
-            .collect();
-
-        Ok(entries)
-    } else {
-        Err("Database not available".to_string())
+    if let Some(ref search) = query.search {
+        sql.push_str(" AND (text_content LIKE ? OR custom_name LIKE ? OR content_preview LIKE ?)");
+        let search_pattern = format!("%{}%", search);
+        bind_values.push(search_pattern.clone());
+        bind_values.push(search_pattern.clone());
+        bind_values.push(search_pattern);
     }
+
+    if let Some(ref ct) = query.content_type {
+        sql.push_str(" AND content_type = ?");
+        bind_values.push(ct.clone());
+    }
+
+    if query.pinned_only {
+        sql.push_str(" AND is_pinned = 1");
+    }
+
+    // Pinned items first, then by most recently accessed
+    sql.push_str(" ORDER BY is_pinned DESC, accessed_at DESC");
+    sql.push_str(&format!(" LIMIT {} OFFSET {}", query.limit, query.offset));
+
+    let mut query_builder = sqlx::query(&sql);
+
+    for val in &bind_values {
+        query_builder = query_builder.bind(val);
+    }
+
+    let rows = query_builder
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let entries: Vec<ClipboardEntry> = rows
+        .iter()
+        .map(|row| ClipboardEntry {
+            id: row.get("id"),
+            content_type: row.get("content_type"),
+            text_content: row.get("text_content"),
+            html_content: row.get("html_content"),
+            image_path: row.get("image_path"),
+            file_paths: row.get("file_paths"),
+            source_app: row.get("source_app"),
+            source_app_name: row.get("source_app_name"),
+            custom_name: row.get("custom_name"),
+            is_pinned: row.get("is_pinned"),
+            is_favorite: row.get("is_favorite"),
+            content_hash: row.get("content_hash"),
+            content_preview: row.get("content_preview"),
+            byte_size: row.get("byte_size"),
+            created_at: row.get("created_at"),
+            accessed_at: row.get("accessed_at"),
+            access_count: row.get("access_count"),
+        })
+        .collect();
+
+    Ok(entries)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<(), String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        // Capture the image path first so we can remove the file after the row.
-        let image_path: Option<String> = sqlx::query_scalar(
-            "SELECT image_path FROM clipboard_entries WHERE id = ?",
-        )
+    // Capture the image path first so we can remove the file after the row.
+    let image_path: Option<String> = sqlx::query_scalar(
+        "SELECT image_path FROM clipboard_entries WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .flatten();
+
+    sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
         .bind(id)
-        .fetch_optional(pool)
+        .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?
-        .flatten();
+        .map_err(|e| e.to_string())?;
 
-        sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
-            .bind(id)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if let Some(path) = image_path {
-            let _ = std::fs::remove_file(path);
-        }
-        Ok(())
-    } else {
-        Err("Database not available".to_string())
+    if let Some(path) = image_path {
+        let _ = std::fs::remove_file(path);
     }
+    Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        // Collect image files of the rows we're about to delete so they don't
-        // become orphaned on disk.
-        let image_paths: Vec<String> = sqlx::query_scalar(
-            "SELECT image_path FROM clipboard_entries \
-             WHERE is_pinned = 0 AND image_path IS NOT NULL",
-        )
-        .fetch_all(pool)
+    // Collect image files of the rows we're about to delete so they don't
+    // become orphaned on disk.
+    let image_paths: Vec<String> = sqlx::query_scalar(
+        "SELECT image_path FROM clipboard_entries \
+         WHERE is_pinned = 0 AND image_path IS NOT NULL",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query("DELETE FROM clipboard_entries WHERE is_pinned = 0")
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
-        sqlx::query("DELETE FROM clipboard_entries WHERE is_pinned = 0")
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        for path in image_paths {
-            let _ = std::fs::remove_file(path);
-        }
-        Ok(())
-    } else {
-        Err("Database not available".to_string())
+    for path in image_paths {
+        let _ = std::fs::remove_file(path);
     }
+    Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn toggle_pin_entry(app_handle: AppHandle, id: i32) -> Result<bool, String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        sqlx::query("UPDATE clipboard_entries SET is_pinned = NOT is_pinned WHERE id = ?")
-            .bind(id)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE clipboard_entries SET is_pinned = NOT is_pinned WHERE id = ?")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-        let row = sqlx::query("SELECT is_pinned FROM clipboard_entries WHERE id = ?")
-            .bind(id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let row = sqlx::query("SELECT is_pinned FROM clipboard_entries WHERE id = ?")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-        Ok(row.get::<bool, _>("is_pinned"))
-    } else {
-        Err("Database not available".to_string())
-    }
+    Ok(row.get::<bool, _>("is_pinned"))
 }
 
 #[tauri::command]
@@ -181,20 +161,15 @@ pub async fn rename_clipboard_entry(
     id: i32,
     name: String,
 ) -> Result<(), String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        sqlx::query("UPDATE clipboard_entries SET custom_name = ? WHERE id = ?")
-            .bind(&name)
-            .bind(id)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    } else {
-        Err("Database not available".to_string())
-    }
+    sqlx::query("UPDATE clipboard_entries SET custom_name = ? WHERE id = ?")
+        .bind(&name)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Paste an image entry by reading the saved PNG file and writing it to the pasteboard
@@ -373,40 +348,35 @@ pub async fn update_entry_content(
     id: i32,
     content: String,
 ) -> Result<(), String> {
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
-    if let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") {
-        // Generate a preview (first 200 chars, single line)
-        let preview = content
-            .chars()
-            .take(200)
-            .collect::<String>()
-            .replace('\n', " ");
+    // Generate a preview (first 200 chars, single line)
+    let preview = content
+        .chars()
+        .take(200)
+        .collect::<String>()
+        .replace('\n', " ");
 
-        // Compute new hash and byte size
-        use sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        hasher.update(content.as_bytes());
-        let hash = hex::encode(hasher.finalize());
-        let byte_size = content.len() as i64;
+    // Compute new hash and byte size
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let hash = hex::encode(hasher.finalize());
+    let byte_size = content.len() as i64;
 
-        sqlx::query(
-            "UPDATE clipboard_entries SET text_content = ?, content_preview = ?, \
-             content_hash = ?, byte_size = ? WHERE id = ?"
-        )
-            .bind(&content)
-            .bind(&preview)
-            .bind(&hash)
-            .bind(byte_size)
-            .bind(id)
-            .execute(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    } else {
-        Err("Database not available".to_string())
-    }
+    sqlx::query(
+        "UPDATE clipboard_entries SET text_content = ?, content_preview = ?, \
+         content_hash = ?, byte_size = ? WHERE id = ?",
+    )
+        .bind(&content)
+        .bind(&preview)
+        .bind(&hash)
+        .bind(byte_size)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Append text to the current clipboard content
@@ -775,13 +745,7 @@ struct ExportData {
 #[specta::specta]
 pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, String> {
     // 1. Read all entries from the database
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
-
-    let pool = match instances.get("sqlite:magpie.db") {
-        Some(DbPool::Sqlite(pool)) => pool.clone(),
-        _ => return Err("Database not available".to_string()),
-    };
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
     let rows = sqlx::query(
         "SELECT content_type, text_content, html_content, image_path, file_paths, \
@@ -937,13 +901,7 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
     }
 
     // 3. Insert entries into the database, skipping duplicates
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
-
-    let pool = match instances.get("sqlite:magpie.db") {
-        Some(DbPool::Sqlite(pool)) => pool.clone(),
-        _ => return Err("Database not available".to_string()),
-    };
+    let pool = get_pool(&app_handle).await.map_err(String::from)?;
 
     let mut imported_count = 0u32;
 

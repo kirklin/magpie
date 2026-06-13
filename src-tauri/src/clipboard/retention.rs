@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Manager};
-use tauri_plugin_sql::{DbInstances, DbPool};
+
+use crate::database::pool::get_pool;
 
 /// Fallbacks used when the corresponding setting is absent from settings.json.
 const DEFAULT_MAX_COUNT: i64 = 5000;
@@ -29,11 +30,7 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
     let max_count = read_setting_i64(app_handle, "max_history_count", DEFAULT_MAX_COUNT);
     let retention_days = read_setting_i64(app_handle, "history_retention_days", DEFAULT_RETENTION_DAYS);
 
-    let db_instances = app_handle.state::<DbInstances>();
-    let instances = db_instances.0.read().await;
-    let Some(DbPool::Sqlite(pool)) = instances.get("sqlite:magpie.db") else {
-        return Err("Database not available".to_string());
-    };
+    let pool = get_pool(app_handle).await.map_err(String::from)?;
 
     // (id, image_path) of rows to delete. A row may match both rules; the
     // second DELETE for it is simply a no-op.
@@ -48,7 +45,7 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
              LIMIT -1 OFFSET ?",
         )
         .bind(max_count)
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?;
         victims.extend(rows);
@@ -64,7 +61,7 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
              WHERE is_pinned = 0 AND accessed_at < ?",
         )
         .bind(&cutoff)
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?;
         victims.extend(rows);
@@ -78,7 +75,7 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
     for (id, image_path) in &victims {
         let result = sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
             .bind(id)
-            .execute(pool)
+            .execute(&pool)
             .await;
         if let Ok(r) = result {
             if r.rows_affected() > 0 {
