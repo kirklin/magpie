@@ -6,6 +6,17 @@ import React, { useEffect, useState } from "react";
 import { getTypeLabel } from "../utils/classifier";
 import "prismjs/themes/prism-tomorrow.css";
 
+// Escape clipboard content before it reaches dangerouslySetInnerHTML.
+// Prism's own output is already escaped; this guards the fallback path.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 type FileCategory = "image" | "video" | "audio" | "pdf" | "text" | "other";
 
 function getFileCategory(filePath: string): FileCategory {
@@ -434,11 +445,11 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                     })()
                   : isCode
                     ? (() => {
-                        let highlightedCode = content;
+                        let highlightedCode = escapeHtml(content);
                         try {
                           highlightedCode = Prism.highlight(content, Prism.languages.javascript, "javascript");
                         } catch {
-                          // Fallback to raw text
+                          // Fallback to escaped raw text (already set above)
                         }
                         return (
                           <div className="h-full w-full relative flex flex-col">
