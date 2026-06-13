@@ -1,33 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 
-export interface ClipboardEntry {
-  id: number;
-  content_type: string;
-  text_content: string | null;
-  html_content: string | null;
-  image_path: string | null;
-  file_paths: string | null;
-  source_app: string | null;
-  source_app_name: string | null;
-  custom_name: string | null;
-  is_pinned: boolean;
-  is_favorite: boolean;
-  content_hash: string;
-  content_preview: string | null;
-  byte_size: number;
-  created_at: string;
-  accessed_at: string;
-  access_count: number;
-}
+// IPC types are generated from the Rust structs — see src/bindings.ts,
+// regenerated via `cargo test export_typescript_bindings`. Imported for local
+// use and re-exported so existing
+// `import { ClipboardEntry } from "../stores/clipboard"` keeps working.
+import type { ClipboardEntry, ClipboardQuery } from "../bindings";
 
-export interface ClipboardQuery {
-  search: string | null;
-  content_type: string | null;
-  pinned_only: boolean;
-  limit: number;
-  offset: number;
-}
+export type { ClipboardEntry, ClipboardQuery };
 
 /** Number of entries fetched per page. The list pages in more on scroll. */
 export const PAGE_SIZE = 100;
