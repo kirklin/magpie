@@ -5,6 +5,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::database::pool::get_pool;
+use crate::clipboard::native;
 use crate::clipboard::paste;
 
 #[tauri::command]
@@ -178,34 +179,7 @@ pub async fn rename_clipboard_entry(
 pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        // Read the PNG file
-        let png_data = std::fs::read(&image_path)
-            .map_err(|e| format!("Failed to read image file: {}", e))?;
-
-        // Write PNG data to pasteboard on main thread
-        let (tx, rx) = std::sync::mpsc::channel();
-        let _ = app_handle.run_on_main_thread(move || {
-            use objc2_app_kit::NSPasteboard;
-            use objc2_foundation::{NSData, NSString};
-            use objc2::rc::autoreleasepool;
-
-            let result = autoreleasepool(|_| {
-                let pasteboard = NSPasteboard::generalPasteboard();
-                pasteboard.clearContents();
-
-                let png_type = NSString::from_str("public.png");
-                let ns_data = NSData::with_bytes(&png_data);
-                let success = pasteboard.setData_forType(Some(&ns_data), &png_type);
-                success
-            });
-            let _ = tx.send(result);
-        });
-
-        let success = rx.recv().map_err(|e| e.to_string())?;
-        if !success {
-            return Err("Failed to write image to pasteboard".to_string());
-        }
-        crate::clipboard::monitor::mark_self_write(&app_handle);
+        native::write_png_to_pasteboard(&app_handle, &image_path)?;
 
         // Hide and paste
         app_handle.hide().map_err(|e| e.to_string())?;
@@ -222,30 +196,7 @@ pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Res
 pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let png_data = std::fs::read(&image_path)
-            .map_err(|e| format!("Failed to read image file: {}", e))?;
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        let _ = app_handle.run_on_main_thread(move || {
-            use objc2_app_kit::NSPasteboard;
-            use objc2_foundation::{NSData, NSString};
-            use objc2::rc::autoreleasepool;
-
-            let result = autoreleasepool(|_| {
-                let pasteboard = NSPasteboard::generalPasteboard();
-                pasteboard.clearContents();
-                let png_type = NSString::from_str("public.png");
-                let ns_data = NSData::with_bytes(&png_data);
-                pasteboard.setData_forType(Some(&ns_data), &png_type)
-            });
-            let _ = tx.send(result);
-        });
-
-        let success = rx.recv().map_err(|e| e.to_string())?;
-        if !success {
-            return Err("Failed to write image to pasteboard".to_string());
-        }
-        crate::clipboard::monitor::mark_self_write(&app_handle);
+        native::write_png_to_pasteboard(&app_handle, &image_path)?;
     }
 
     Ok(())
@@ -482,30 +433,7 @@ pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: Stri
     // Write image to pasteboard
     #[cfg(target_os = "macos")]
     {
-        let png_data = std::fs::read(&image_path)
-            .map_err(|e| format!("Failed to read image file: {}", e))?;
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        let _ = app_handle.run_on_main_thread(move || {
-            use objc2_app_kit::NSPasteboard;
-            use objc2_foundation::{NSData, NSString};
-            use objc2::rc::autoreleasepool;
-
-            let result = autoreleasepool(|_| {
-                let pasteboard = NSPasteboard::generalPasteboard();
-                pasteboard.clearContents();
-                let png_type = NSString::from_str("public.png");
-                let ns_data = NSData::with_bytes(&png_data);
-                pasteboard.setData_forType(Some(&ns_data), &png_type)
-            });
-            let _ = tx.send(result);
-        });
-
-        let success = rx.recv().map_err(|e| e.to_string())?;
-        if !success {
-            return Err("Failed to write image to pasteboard".to_string());
-        }
-        crate::clipboard::monitor::mark_self_write(&app_handle);
+        native::write_png_to_pasteboard(&app_handle, &image_path)?;
     }
 
     paste_to_previous_app_keeping_window(&app_handle).await
