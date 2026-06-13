@@ -37,6 +37,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Frontend tests
+        run: pnpm test
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Check generated bindings are up to date
+        run: |
+          # The Rust test run regenerates src/bindings.ts (export_typescript_bindings).
+          # A diff here means a Rust IPC type changed without regenerating the bindings.
+          git diff --exit-code src/bindings.ts \
+            || (echo "::error::src/bindings.ts is stale — run 'cargo test export_typescript_bindings' and commit the result" && exit 1)
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         with:
