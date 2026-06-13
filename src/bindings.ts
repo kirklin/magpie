@@ -44,15 +44,6 @@ export const commands = {
 	 *  Returns the number of entries imported (skipping duplicates).
 	 */
 	importClipboardHistory: () => typedError<number, string>(__TAURI_INVOKE("import_clipboard_history")),
-	getSnippets: (folderId: number | null, search: string | null) => typedError<Snippet[], string>(__TAURI_INVOKE("get_snippets", { folderId, search })),
-	createSnippet: (name: string, content: string, keyword: string | null, folderId: number | null, tags: string | null) => typedError<number, string>(__TAURI_INVOKE("create_snippet", { name, content, keyword, folderId, tags })),
-	updateSnippet: (id: number, name: string, content: string, keyword: string | null, folderId: number | null, tags: string | null) => typedError<null, string>(__TAURI_INVOKE("update_snippet", { id, name, content, keyword, folderId, tags })),
-	deleteSnippet: (id: number) => typedError<null, string>(__TAURI_INVOKE("delete_snippet", { id })),
-	getSnippetFolders: () => typedError<SnippetFolder[], string>(__TAURI_INVOKE("get_snippet_folders")),
-	createSnippetFolder: (name: string, parentId: number | null) => typedError<number, string>(__TAURI_INVOKE("create_snippet_folder", { name, parentId })),
-	deleteSnippetFolder: (id: number) => typedError<null, string>(__TAURI_INVOKE("delete_snippet_folder", { id })),
-	/**  Convert a clipboard entry to a snippet */
-	saveAsSnippet: (name: string, content: string, folderId: number | null) => typedError<number, string>(__TAURI_INVOKE("save_as_snippet", { name, content, folderId })),
 	getDefaultSettings: () => __TAURI_INVOKE<AppSettings>("get_default_settings"),
 	/**
 	 *  Re-register the global shortcut at runtime.
@@ -79,7 +70,6 @@ export type AppSettings = {
 	max_history_count: number,
 	default_action: string,
 	global_shortcut: string,
-	snippet_shortcut: string,
 	excluded_apps: string[],
 	theme: string,
 	launch_at_login: boolean,
@@ -115,28 +105,6 @@ export type ClipboardQuery = {
 	pinned_only: boolean,
 	limit: number,
 	offset: number,
-};
-
-/**  A snippet template */
-export type Snippet = {
-	id: number,
-	name: string,
-	content: string,
-	keyword: string | null,
-	folder_id: number | null,
-	tags: string | null,
-	is_pinned: boolean,
-	created_at: string,
-	updated_at: string,
-};
-
-/**  A snippet folder for organization */
-export type SnippetFolder = {
-	id: number,
-	name: string,
-	parent_id: number | null,
-	sort_order: number,
-	created_at: string,
 };
 
 /* Tauri Specta runtime */

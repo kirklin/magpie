@@ -44,15 +44,6 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::clipboard::paste_file_and_keep_window,
         commands::clipboard::export_clipboard_history,
         commands::clipboard::import_clipboard_history,
-        // Snippet commands
-        commands::snippet::get_snippets,
-        commands::snippet::create_snippet,
-        commands::snippet::update_snippet,
-        commands::snippet::delete_snippet,
-        commands::snippet::get_snippet_folders,
-        commands::snippet::create_snippet_folder,
-        commands::snippet::delete_snippet_folder,
-        commands::snippet::save_as_snippet,
         // Settings commands
         commands::settings::get_default_settings,
         commands::settings::update_global_shortcut,

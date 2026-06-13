@@ -67,34 +67,6 @@ pub struct ClipboardEntry {
     pub access_count: i32,
 }
 
-/// A snippet template
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-pub struct Snippet {
-    #[specta(type = i32)]
-    pub id: i64,
-    pub name: String,
-    pub content: String,
-    pub keyword: Option<String>,
-    #[specta(type = Option<i32>)]
-    pub folder_id: Option<i64>,
-    pub tags: Option<String>, // JSON array
-    pub is_pinned: bool,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// A snippet folder for organization
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-pub struct SnippetFolder {
-    #[specta(type = i32)]
-    pub id: i64,
-    pub name: String,
-    #[specta(type = Option<i32>)]
-    pub parent_id: Option<i64>,
-    pub sort_order: i32,
-    pub created_at: String,
-}
-
 /// Query parameters for fetching clipboard entries
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ClipboardQuery {
@@ -124,7 +96,6 @@ pub struct AppSettings {
     pub max_history_count: i32,         // -1 = unlimited
     pub default_action: String,         // "paste" or "copy"
     pub global_shortcut: String,        // e.g. "CmdOrCtrl+Shift+V"
-    pub snippet_shortcut: String,       // e.g. "CmdOrCtrl+Shift+S"
     pub excluded_apps: Vec<String>,     // bundle identifiers
     pub theme: String,                  // "system", "dark", "light"
     pub launch_at_login: bool,
@@ -139,7 +110,6 @@ impl Default for AppSettings {
             max_history_count: 5000,
             default_action: "paste".to_string(),
             global_shortcut: "CmdOrCtrl+Shift+V".to_string(),
-            snippet_shortcut: "CmdOrCtrl+Shift+S".to_string(),
             excluded_apps: vec![],
             theme: "system".to_string(),
             launch_at_login: false,
