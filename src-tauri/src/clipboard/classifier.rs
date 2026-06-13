@@ -108,10 +108,12 @@ impl ContentClassifier {
             .collect::<Vec<&str>>()
             .join(" ");
 
-        if cleaned.len() <= max_len {
-            cleaned
-        } else {
-            format!("{}…", &cleaned[..max_len])
+        // `max_len` counts characters, not bytes: slicing on a raw byte
+        // index panics whenever it lands inside a multi-byte codepoint
+        // (common for CJK content, where each char is 3 bytes).
+        match cleaned.char_indices().nth(max_len) {
+            Some((byte_idx, _)) => format!("{}…", &cleaned[..byte_idx]),
+            None => cleaned,
         }
     }
 }
@@ -119,5 +121,38 @@ impl ContentClassifier {
 impl Default for ContentClassifier {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_keeps_short_text_unchanged() {
+        assert_eq!(ContentClassifier::generate_preview("hello world", 100), "hello world");
+    }
+
+    #[test]
+    fn preview_collapses_lines_and_trims() {
+        let input = "  first  \n\n  second  \n";
+        assert_eq!(ContentClassifier::generate_preview(input, 100), "first second");
+    }
+
+    #[test]
+    fn preview_truncates_ascii_on_char_boundary() {
+        let input = "a".repeat(150);
+        let preview = ContentClassifier::generate_preview(&input, 100);
+        assert_eq!(preview, format!("{}…", "a".repeat(100)));
+    }
+
+    #[test]
+    fn preview_does_not_panic_on_multibyte_boundary() {
+        // Each '汉' is 3 bytes; byte index 100 lands inside a codepoint.
+        // The old byte-slice implementation panicked here.
+        let input = "汉".repeat(150);
+        let preview = ContentClassifier::generate_preview(&input, 100);
+        assert_eq!(preview, format!("{}…", "汉".repeat(100)));
+        assert_eq!(preview.chars().count(), 101); // 100 chars + ellipsis
     }
 }
