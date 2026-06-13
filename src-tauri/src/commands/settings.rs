@@ -1,12 +1,14 @@
 use crate::database::models::AppSettings;
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_default_settings() -> AppSettings {
     AppSettings::default()
 }
 
 /// Show or hide the menu bar tray icon at runtime.
 #[tauri::command]
+#[specta::specta]
 pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(), String> {
     use tauri::Manager;
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
@@ -30,6 +32,7 @@ const DEFAULT_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
 /// valid-but-unregisterable combination (e.g. already held by another app)
 /// fails to bind, we fall back to the default shortcut and return an error.
 #[tauri::command]
+#[specta::specta]
 pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 

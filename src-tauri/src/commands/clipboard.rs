@@ -8,6 +8,7 @@ use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::clipboard::paste;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_clipboard_entries(
     app_handle: AppHandle,
     query: ClipboardQuery,
@@ -86,7 +87,8 @@ pub async fn get_clipboard_entries(
 }
 
 #[tauri::command]
-pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i64) -> Result<(), String> {
+#[specta::specta]
+pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -117,6 +119,7 @@ pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i64) -> Result<()
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
@@ -147,7 +150,8 @@ pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String
 }
 
 #[tauri::command]
-pub async fn toggle_pin_entry(app_handle: AppHandle, id: i64) -> Result<bool, String> {
+#[specta::specta]
+pub async fn toggle_pin_entry(app_handle: AppHandle, id: i32) -> Result<bool, String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -171,9 +175,10 @@ pub async fn toggle_pin_entry(app_handle: AppHandle, id: i64) -> Result<bool, St
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn rename_clipboard_entry(
     app_handle: AppHandle,
-    id: i64,
+    id: i32,
     name: String,
 ) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
@@ -194,6 +199,7 @@ pub async fn rename_clipboard_entry(
 
 /// Paste an image entry by reading the saved PNG file and writing it to the pasteboard
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -237,6 +243,7 @@ pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Res
 
 /// Copy an image entry to the clipboard without pasting
 #[tauri::command]
+#[specta::specta]
 pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -270,6 +277,7 @@ pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(),
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
     // 1. Write to clipboard
     app_handle
@@ -290,6 +298,7 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
     paste::copy_to_clipboard(&app_handle, &text)?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
@@ -297,6 +306,7 @@ pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), S
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), String> {
     app_handle
         .clipboard()
@@ -313,6 +323,7 @@ pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
@@ -340,6 +351,7 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
@@ -355,9 +367,10 @@ pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result
 
 /// Update the text content of a clipboard entry (Edit Content action)
 #[tauri::command]
+#[specta::specta]
 pub async fn update_entry_content(
     app_handle: AppHandle,
-    id: i64,
+    id: i32,
     content: String,
 ) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
@@ -398,6 +411,7 @@ pub async fn update_entry_content(
 
 /// Append text to the current clipboard content
 #[tauri::command]
+#[specta::specta]
 pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), String> {
     // Read current clipboard content
     let current = app_handle
@@ -422,6 +436,7 @@ pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), St
 
 /// Save clipboard entry content to a file using a native save dialog
 #[tauri::command]
+#[specta::specta]
 pub async fn save_entry_as_file(
     app_handle: AppHandle,
     content: String,
@@ -479,6 +494,7 @@ pub async fn save_entry_as_file(
 /// Activates the target app (window stays on screen due to always_on_top),
 /// simulates Cmd+V, then re-focuses Magpie.
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), String> {
     app_handle
         .clipboard()
@@ -491,6 +507,7 @@ pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Resul
 
 /// Paste an image entry while keeping the Magpie window visible.
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), String> {
     // Write image to pasteboard
     #[cfg(target_os = "macos")]
@@ -526,6 +543,7 @@ pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: Stri
 
 /// Paste file entries while keeping the Magpie window visible.
 #[tauri::command]
+#[specta::specta]
 pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
@@ -754,6 +772,7 @@ struct ExportData {
 /// Export clipboard history to a JSON file via native save dialog.
 /// Returns the number of entries exported, or 0 if the user cancelled.
 #[tauri::command]
+#[specta::specta]
 pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, String> {
     // 1. Read all entries from the database
     let db_instances = app_handle.state::<DbInstances>();
@@ -857,6 +876,7 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
 /// Import clipboard history from a JSON file via native open dialog.
 /// Returns the number of entries imported (skipping duplicates).
 #[tauri::command]
+#[specta::specta]
 pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, String> {
     // 1. Show native open dialog to pick a JSON file
     let json_content: String;

@@ -44,8 +44,9 @@ impl ContentType {
 }
 
 /// A clipboard history entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ClipboardEntry {
+    #[specta(type = i32)]
     pub id: i64,
     pub content_type: String,
     pub text_content: Option<String>,
@@ -59,6 +60,7 @@ pub struct ClipboardEntry {
     pub is_favorite: bool,
     pub content_hash: String,
     pub content_preview: Option<String>, // truncated preview for list display
+    #[specta(type = i32)]
     pub byte_size: i64,
     pub created_at: String,
     pub accessed_at: String,
@@ -66,12 +68,14 @@ pub struct ClipboardEntry {
 }
 
 /// A snippet template
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Snippet {
+    #[specta(type = i32)]
     pub id: i64,
     pub name: String,
     pub content: String,
     pub keyword: Option<String>,
+    #[specta(type = Option<i32>)]
     pub folder_id: Option<i64>,
     pub tags: Option<String>, // JSON array
     pub is_pinned: bool,
@@ -80,17 +84,19 @@ pub struct Snippet {
 }
 
 /// A snippet folder for organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SnippetFolder {
+    #[specta(type = i32)]
     pub id: i64,
     pub name: String,
+    #[specta(type = Option<i32>)]
     pub parent_id: Option<i64>,
     pub sort_order: i32,
     pub created_at: String,
 }
 
 /// Query parameters for fetching clipboard entries
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ClipboardQuery {
     pub search: Option<String>,
     pub content_type: Option<String>,
@@ -112,7 +118,7 @@ impl Default for ClipboardQuery {
 }
 
 /// Settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AppSettings {
     pub history_retention_days: i32,    // -1 = unlimited
     pub max_history_count: i32,         // -1 = unlimited

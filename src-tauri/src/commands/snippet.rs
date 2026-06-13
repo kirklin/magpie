@@ -6,9 +6,10 @@ use sqlx::Row;
 use crate::database::models::{Snippet, SnippetFolder};
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_snippets(
     app_handle: AppHandle,
-    folder_id: Option<i64>,
+    folder_id: Option<i32>,
     search: Option<String>,
 ) -> Result<Vec<Snippet>, String> {
     let db_instances = app_handle.state::<DbInstances>();
@@ -64,14 +65,15 @@ pub async fn get_snippets(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn create_snippet(
     app_handle: AppHandle,
     name: String,
     content: String,
     keyword: Option<String>,
-    folder_id: Option<i64>,
+    folder_id: Option<i32>,
     tags: Option<String>,
-) -> Result<i64, String> {
+) -> Result<i32, String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -93,20 +95,21 @@ pub async fn create_snippet(
         .await
         .map_err(|e| e.to_string())?;
 
-        Ok(result.last_insert_rowid())
+        Ok(result.last_insert_rowid() as i32)
     } else {
         Err("Database not available".to_string())
     }
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn update_snippet(
     app_handle: AppHandle,
-    id: i64,
+    id: i32,
     name: String,
     content: String,
     keyword: Option<String>,
-    folder_id: Option<i64>,
+    folder_id: Option<i32>,
     tags: Option<String>,
 ) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
@@ -136,7 +139,8 @@ pub async fn update_snippet(
 }
 
 #[tauri::command]
-pub async fn delete_snippet(app_handle: AppHandle, id: i64) -> Result<(), String> {
+#[specta::specta]
+pub async fn delete_snippet(app_handle: AppHandle, id: i32) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -153,6 +157,7 @@ pub async fn delete_snippet(app_handle: AppHandle, id: i64) -> Result<(), String
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_snippet_folders(app_handle: AppHandle) -> Result<Vec<SnippetFolder>, String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
@@ -181,11 +186,12 @@ pub async fn get_snippet_folders(app_handle: AppHandle) -> Result<Vec<SnippetFol
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn create_snippet_folder(
     app_handle: AppHandle,
     name: String,
-    parent_id: Option<i64>,
-) -> Result<i64, String> {
+    parent_id: Option<i32>,
+) -> Result<i32, String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -199,14 +205,15 @@ pub async fn create_snippet_folder(
         .await
         .map_err(|e| e.to_string())?;
 
-        Ok(result.last_insert_rowid())
+        Ok(result.last_insert_rowid() as i32)
     } else {
         Err("Database not available".to_string())
     }
 }
 
 #[tauri::command]
-pub async fn delete_snippet_folder(app_handle: AppHandle, id: i64) -> Result<(), String> {
+#[specta::specta]
+pub async fn delete_snippet_folder(app_handle: AppHandle, id: i32) -> Result<(), String> {
     let db_instances = app_handle.state::<DbInstances>();
     let instances = db_instances.0.read().await;
 
@@ -232,11 +239,12 @@ pub async fn delete_snippet_folder(app_handle: AppHandle, id: i64) -> Result<(),
 
 /// Convert a clipboard entry to a snippet
 #[tauri::command]
+#[specta::specta]
 pub async fn save_as_snippet(
     app_handle: AppHandle,
     name: String,
     content: String,
-    folder_id: Option<i64>,
-) -> Result<i64, String> {
+    folder_id: Option<i32>,
+) -> Result<i32, String> {
     create_snippet(app_handle, name, content, None, folder_id, None).await
 }

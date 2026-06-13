@@ -17,6 +17,53 @@ pub struct PreviousAppBundleId(pub Mutex<Option<String>>);
 /// Used by paste_and_keep_window to prevent hide during focus switch.
 pub struct SkipBlurHide(pub AtomicBool);
 
+/// Single source of truth for the IPC command surface. Used both to build the
+/// runtime invoke handler and to export the TypeScript bindings (see the
+/// `export_typescript_bindings` test, run via `cargo test`).
+fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    use tauri_specta::collect_commands;
+    tauri_specta::Builder::<tauri::Wry>::new().commands(collect_commands![
+        // Clipboard commands
+        commands::clipboard::get_clipboard_entries,
+        commands::clipboard::delete_clipboard_entry,
+        commands::clipboard::clear_clipboard_history,
+        commands::clipboard::toggle_pin_entry,
+        commands::clipboard::rename_clipboard_entry,
+        commands::clipboard::paste_clipboard_entry,
+        commands::clipboard::paste_image_entry,
+        commands::clipboard::copy_image_entry,
+        commands::clipboard::copy_clipboard_entry,
+        commands::clipboard::paste_as_plain_text,
+        commands::clipboard::paste_file_entry,
+        commands::clipboard::copy_file_entry,
+        commands::clipboard::update_entry_content,
+        commands::clipboard::append_to_clipboard,
+        commands::clipboard::save_entry_as_file,
+        commands::clipboard::paste_and_keep_window,
+        commands::clipboard::paste_image_and_keep_window,
+        commands::clipboard::paste_file_and_keep_window,
+        commands::clipboard::export_clipboard_history,
+        commands::clipboard::import_clipboard_history,
+        // Snippet commands
+        commands::snippet::get_snippets,
+        commands::snippet::create_snippet,
+        commands::snippet::update_snippet,
+        commands::snippet::delete_snippet,
+        commands::snippet::get_snippet_folders,
+        commands::snippet::create_snippet_folder,
+        commands::snippet::delete_snippet_folder,
+        commands::snippet::save_as_snippet,
+        // Settings commands
+        commands::settings::get_default_settings,
+        commands::settings::update_global_shortcut,
+        commands::settings::set_tray_visible,
+        // System commands
+        commands::system::get_app_icon,
+        commands::system::get_file_icon,
+        commands::system::hide_window,
+    ])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging: write to both stderr and a log file
@@ -68,6 +115,8 @@ pub fn run() {
 
     builder.init();
 
+    let specta = specta_builder();
+
     let mut app = tauri::Builder::default()
         // --- Plugins ---
         .plugin(tauri_plugin_opener::init())
@@ -95,46 +144,7 @@ pub fn run() {
         .manage(PreviousAppBundleId(Mutex::new(None)))
         .manage(SkipBlurHide(AtomicBool::new(false)))
         // --- Commands ---
-        .invoke_handler(tauri::generate_handler![
-            // Clipboard commands
-            commands::clipboard::get_clipboard_entries,
-            commands::clipboard::delete_clipboard_entry,
-            commands::clipboard::clear_clipboard_history,
-            commands::clipboard::toggle_pin_entry,
-            commands::clipboard::rename_clipboard_entry,
-            commands::clipboard::paste_clipboard_entry,
-            commands::clipboard::paste_image_entry,
-            commands::clipboard::copy_image_entry,
-            commands::clipboard::copy_clipboard_entry,
-            commands::clipboard::paste_as_plain_text,
-            commands::clipboard::paste_file_entry,
-            commands::clipboard::copy_file_entry,
-            commands::clipboard::update_entry_content,
-            commands::clipboard::append_to_clipboard,
-            commands::clipboard::save_entry_as_file,
-            commands::clipboard::paste_and_keep_window,
-            commands::clipboard::paste_image_and_keep_window,
-            commands::clipboard::paste_file_and_keep_window,
-            commands::clipboard::export_clipboard_history,
-            commands::clipboard::import_clipboard_history,
-            // Snippet commands
-            commands::snippet::get_snippets,
-            commands::snippet::create_snippet,
-            commands::snippet::update_snippet,
-            commands::snippet::delete_snippet,
-            commands::snippet::get_snippet_folders,
-            commands::snippet::create_snippet_folder,
-            commands::snippet::delete_snippet_folder,
-            commands::snippet::save_as_snippet,
-            // Settings commands
-            commands::settings::get_default_settings,
-            commands::settings::update_global_shortcut,
-            commands::settings::set_tray_visible,
-            // System commands
-            commands::system::get_app_icon,
-            commands::system::get_file_icon,
-            commands::system::hide_window,
-        ])
+        .invoke_handler(specta.invoke_handler())
         // --- Setup ---
         .setup(|app| {
             let handle = app.handle().clone();
@@ -426,4 +436,25 @@ fn disable_app_nap() {
     std::mem::forget(_activity);
 
     log::info!("App Nap disabled for clipboard monitoring");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regenerates src/bindings.ts from the Rust command surface.
+    /// Run with `cargo test export_typescript_bindings`. Keep the output
+    /// committed; CI can run this with --check semantics once wired up.
+    #[test]
+    fn export_typescript_bindings() {
+        // i64 ids/byte_size are exported as TS `number` via #[specta(type = i32)]
+        // on the model fields (Tauri's JSON IPC sends them as numbers anyway;
+        // values stay well within Number.MAX_SAFE_INTEGER).
+        specta_builder()
+            .export(
+                specta_typescript::Typescript::default(),
+                "../src/bindings.ts",
+            )
+            .expect("failed to export typescript bindings");
+    }
 }

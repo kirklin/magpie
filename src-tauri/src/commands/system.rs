@@ -13,6 +13,7 @@ impl Default for AppIconCache {
 
 /// Get the app icon as a base64-encoded PNG string for a given bundle ID
 #[tauri::command]
+#[specta::specta]
 pub async fn get_app_icon(
     bundle_id: String,
     cache: State<'_, AppIconCache>,
@@ -42,6 +43,7 @@ pub async fn get_app_icon(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_file_icon(
     file_path: String,
 ) -> Result<String, String> {
@@ -149,6 +151,7 @@ fn base64_encode(input: &[u8]) -> String {
 
 /// Hide the main window
 #[tauri::command]
+#[specta::specta]
 pub fn hide_window(app_handle: tauri::AppHandle) {
     if let Some(window) = tauri::Manager::get_webview_window(&app_handle, "main") {
         let _ = window.hide();
