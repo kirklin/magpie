@@ -155,4 +155,50 @@ mod tests {
         assert_eq!(preview, format!("{}…", "汉".repeat(100)));
         assert_eq!(preview.chars().count(), 101); // 100 chars + ellipsis
     }
+
+    #[test]
+    fn classify_detects_urls() {
+        let c = ContentClassifier::new();
+        assert_eq!(c.classify_text("https://example.com"), "url");
+        assert_eq!(c.classify_text("http://a.b/c?d=e"), "url");
+        // Trimmed before matching.
+        assert_eq!(c.classify_text("  https://example.com  "), "url");
+    }
+
+    #[test]
+    fn classify_detects_emails() {
+        let c = ContentClassifier::new();
+        assert_eq!(c.classify_text("user@example.com"), "email");
+        assert_eq!(c.classify_text("a.b+c@sub.example.co"), "email");
+    }
+
+    #[test]
+    fn classify_detects_colors() {
+        let c = ContentClassifier::new();
+        assert_eq!(c.classify_text("#fff"), "color");
+        assert_eq!(c.classify_text("#ffffff"), "color");
+        assert_eq!(c.classify_text("#ffeeddcc"), "color");
+        assert_eq!(c.classify_text("rgb(255, 0, 0)"), "color");
+        assert_eq!(c.classify_text("rgba(1,2,3,0.5)"), "color");
+        assert_eq!(c.classify_text("hsl(120, 50%, 50%)"), "color");
+        // 4 hex digits is not a valid color length -> plain text.
+        assert_eq!(c.classify_text("#ffff"), "text");
+    }
+
+    #[test]
+    fn classify_detects_code_only_with_multiple_lines_and_indicators() {
+        let c = ContentClassifier::new();
+        assert_eq!(c.classify_text("const a = 1;\nfunction b() {}"), "code");
+        // Single line never counts as code, even with an indicator.
+        assert_eq!(c.classify_text("const x = 1;"), "text");
+        // Multi-line with fewer than two indicators stays text.
+        assert_eq!(c.classify_text("hello\nworld"), "text");
+    }
+
+    #[test]
+    fn classify_falls_back_to_text() {
+        let c = ContentClassifier::new();
+        assert_eq!(c.classify_text("just some words"), "text");
+        assert_eq!(c.classify_text(""), "text");
+    }
 }
