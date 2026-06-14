@@ -11,3 +11,7 @@
 <p align="center">
   <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
 </p>
+
+## 许可证
+
+基于 [GPL-3.0](./LICENSE) 许可证开源 · © 2026 [Kirk Lin](https://github.com/kirklin)
