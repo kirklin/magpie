@@ -2,6 +2,7 @@ mod clipboard;
 mod commands;
 mod database;
 mod error;
+mod i18n;
 mod menu;
 mod platform;
 mod tray;
@@ -50,6 +51,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::settings::get_default_settings,
         commands::settings::update_global_shortcut,
         commands::settings::set_tray_visible,
+        commands::settings::relocalize_menus,
         // System commands
         commands::system::get_app_icon,
         commands::system::get_file_icon,

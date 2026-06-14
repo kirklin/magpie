@@ -175,6 +175,12 @@ export const useSettingsStore = create<SettingsStore>(set => ({
         const currentSettings = useSettingsStore.getState().settings;
         applyAppearance(currentSettings.theme, currentSettings.accent_color);
       }
+
+      // Rebuild the native tray + app menu so they switch language too. Runs
+      // after persisting so the Rust side reads the new locale from settings.json.
+      if (key === "locale") {
+        await invoke("relocalize_menus");
+      }
     } catch (err) {
       // Revert the optimistic update so a rejected value isn't shown or saved.
       set(state => ({

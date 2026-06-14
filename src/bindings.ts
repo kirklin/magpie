@@ -56,6 +56,12 @@ export const commands = {
 	updateGlobalShortcut: (shortcut: string) => typedError<null, AppError>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
 	/**  Show or hide the menu bar tray icon at runtime. */
 	setTrayVisible: (visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_tray_visible", { visible })),
+	/**
+	 *  Rebuild the native tray + app menu in the currently-persisted locale.
+	 *  Called by the frontend right after the language setting changes, so the OS
+	 *  menus switch language without requiring a restart.
+	 */
+	relocalizeMenus: () => __TAURI_INVOKE<void>("relocalize_menus"),
 	/**  Get the app icon as a base64-encoded PNG string for a given bundle ID */
 	getAppIcon: (bundleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { bundleId })),
 	getFileIcon: (filePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_file_icon", { filePath })),

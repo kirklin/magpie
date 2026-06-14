@@ -590,9 +590,7 @@ export function ClipboardHistory() {
             className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium hover:text-text-accent transition-colors"
             onClick={handlePaste}
           >
-            Paste to
-            {" "}
-            {activeApp}
+            {t("action.paste_to", { app: activeApp })}
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
           </button>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>
@@ -600,7 +598,7 @@ export function ClipboardHistory() {
             className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors"
             onClick={() => setIsActionPanelOpen(true)}
           >
-            Actions
+            {t("ui.actions")}
             <div className="flex items-center gap-0.5">
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">K</kbd>

@@ -11,7 +11,6 @@ pub fn get_default_settings() -> AppSettings {
 #[tauri::command]
 #[specta::specta]
 pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(), AppError> {
-    use tauri::Manager;
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
         tray.set_visible(visible)
             .map_err(|e| AppError::Other { message: format!("Failed to set tray visible: {}", e) })?;
@@ -20,6 +19,16 @@ pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(
     } else {
         Err(AppError::Other { message: "Tray icon not found".to_string() })
     }
+}
+
+/// Rebuild the native tray + app menu in the currently-persisted locale.
+/// Called by the frontend right after the language setting changes, so the OS
+/// menus switch language without requiring a restart.
+#[tauri::command]
+#[specta::specta]
+pub fn relocalize_menus(app_handle: tauri::AppHandle) {
+    crate::menu::apply_locale(&app_handle);
+    crate::tray::apply_locale(&app_handle);
 }
 
 /// Default global shortcut, used as a fallback so the app is never left

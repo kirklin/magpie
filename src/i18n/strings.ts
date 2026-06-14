@@ -162,6 +162,7 @@ export const STRINGS = {
     "ui.search_placeholder": "搜索…",
     "ui.clear": "清除",
     "ui.filter": "筛选",
+    "ui.actions": "操作",
     "ui.clear_all": "清空全部",
     "ui.clear_confirm_message": "所有剪贴板历史将被永久删除，已置顶的条目会保留。",
 
@@ -344,6 +345,7 @@ export const STRINGS = {
     "ui.search_placeholder": "Search…",
     "ui.clear": "Clear",
     "ui.filter": "Filter",
+    "ui.actions": "Actions",
     "ui.clear_all": "Clear All",
     "ui.clear_confirm_message": "All clipboard history will be permanently deleted. Pinned items will be kept.",
 

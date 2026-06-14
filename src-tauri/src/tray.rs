@@ -4,21 +4,38 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+use crate::i18n::{read_locale, tr, Locale};
 use crate::show_window;
+
+/// Build the tray context menu in the given locale. Item ids are stable across
+/// locales so the tray's `on_menu_event` handler keeps matching after a rebuild.
+fn build_tray_menu(app: &AppHandle, locale: Locale) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(app, "show", tr(locale, "tray.show"), true, Some("CmdOrCtrl+Shift+V"))?;
+    let separator1 = PredefinedMenuItem::separator(app)?;
+    let settings = MenuItem::with_id(app, "settings", tr(locale, "menu.settings"), true, Some("CmdOrCtrl+,"))?;
+    let about = MenuItem::with_id(app, "about", tr(locale, "menu.about"), true, None::<&str>)?;
+    let separator2 = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", tr(locale, "tray.quit"), true, Some("CmdOrCtrl+Q"))?;
+
+    Ok(Menu::with_items(
+        app,
+        &[&show, &separator1, &settings, &about, &separator2, &quit],
+    )?)
+}
+
+/// Rebuild the tray menu in the currently-persisted locale. Called when the
+/// user changes language so the tray updates without a restart.
+pub fn apply_locale(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        if let Ok(menu) = build_tray_menu(app, read_locale(app)) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
 
 /// Create and configure the system tray
 pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "show", "打开/隐藏 Magpie", true, Some("CmdOrCtrl+Shift+V"))?;
-    let separator1 = PredefinedMenuItem::separator(app)?;
-    let settings = MenuItem::with_id(app, "settings", "设置…", true, Some("CmdOrCtrl+,"))?;
-    let about = MenuItem::with_id(app, "about", "关于 Magpie", true, None::<&str>)?;
-    let separator2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
-
-    let menu = Menu::with_items(
-        app,
-        &[&show, &separator1, &settings, &about, &separator2, &quit],
-    )?;
+    let menu = build_tray_menu(app, read_locale(app))?;
 
     let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-iconTemplate.png"))
         .unwrap_or_else(|_| app.default_window_icon().cloned().unwrap());
