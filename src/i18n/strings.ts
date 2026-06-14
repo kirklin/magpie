@@ -80,7 +80,7 @@ export const STRINGS = {
     "filter.color": "颜色",
     "filter.code": "代码",
     "filter.email": "邮箱",
-    "search.placeholder": "输入以筛选条目…",
+    "search.placeholder": "搜索剪贴板…",
 
     // action panel
     "action.paste_to": "粘贴到 {app}",
@@ -159,7 +159,6 @@ export const STRINGS = {
     // generic ui
     "ui.settings": "设置",
     "ui.clear_all_history": "清空全部历史",
-    "ui.search_placeholder": "搜索…",
     "ui.clear": "清除",
     "ui.filter": "筛选",
     "ui.actions": "操作",
@@ -268,7 +267,7 @@ export const STRINGS = {
     "filter.color": "Colors",
     "filter.code": "Code",
     "filter.email": "Emails",
-    "search.placeholder": "Type to filter entries…",
+    "search.placeholder": "Search clipboard…",
 
     // action panel
     "action.paste_to": "Paste to {app}",
@@ -342,7 +341,6 @@ export const STRINGS = {
 
     "ui.settings": "Settings",
     "ui.clear_all_history": "Clear all history",
-    "ui.search_placeholder": "Search…",
     "ui.clear": "Clear",
     "ui.filter": "Filter",
     "ui.actions": "Actions",
