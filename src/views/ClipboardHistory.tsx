@@ -14,6 +14,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
 import { ToastContainer, useToastStore } from "../components/Toast";
+import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { groupByDate } from "../utils/grouping";
@@ -128,8 +129,8 @@ export function ClipboardHistory() {
       } else if (selectedEntry.text_content) {
         await pasteEntry(selectedEntry.text_content);
       }
-    } catch {
-      toast.add("Paste failed");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
 
@@ -146,8 +147,8 @@ export function ClipboardHistory() {
         return;
       }
       toast.add("Copied to clipboard");
-    } catch {
-      toast.add("Copy failed");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast]);
 
@@ -155,8 +156,8 @@ export function ClipboardHistory() {
     if (!selectedEntry?.text_content) return;
     try {
       await pasteAsPlainText(selectedEntry.text_content);
-    } catch {
-      toast.add("Paste failed");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [selectedEntry, pasteAsPlainText, toast]);
 
@@ -173,8 +174,8 @@ export function ClipboardHistory() {
         return;
       }
       toast.add("Pasted (window kept open)");
-    } catch {
-      toast.add("Paste failed");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast]);
 
@@ -183,10 +184,14 @@ export function ClipboardHistory() {
     window.open(selectedEntry.text_content, "_blank");
   }, [selectedEntry]);
 
-  const handleAppendToClipboard = useCallback(() => {
+  const handleAppendToClipboard = useCallback(async () => {
     if (!selectedEntry?.text_content) return;
-    appendToClipboard(selectedEntry.text_content);
-    toast.add("Appended to clipboard");
+    try {
+      await appendToClipboard(selectedEntry.text_content);
+      toast.add("Appended to clipboard");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
+    }
   }, [selectedEntry, appendToClipboard, toast]);
 
   const handleEditContent = useCallback(() => {
@@ -194,17 +199,25 @@ export function ClipboardHistory() {
     setIsEditModalOpen(true);
   }, [selectedEntry]);
 
-  const handleSaveEditContent = useCallback((content: string) => {
+  const handleSaveEditContent = useCallback(async (content: string) => {
     if (!selectedId) return;
-    updateEntryContent(selectedId, content);
-    toast.add("Content updated");
+    try {
+      await updateEntryContent(selectedId, content);
+      toast.add("Content updated");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
+    }
   }, [selectedId, updateEntryContent, toast]);
 
-  const handleTogglePin = useCallback(() => {
+  const handleTogglePin = useCallback(async () => {
     if (!selectedId) return;
     const wasPinned = selectedEntry?.is_pinned;
-    togglePin(selectedId);
-    toast.add(wasPinned ? "Unpinned" : "Pinned to top");
+    try {
+      await togglePin(selectedId);
+      toast.add(wasPinned ? "Unpinned" : "Pinned to top");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
+    }
   }, [selectedId, selectedEntry, togglePin, toast]);
 
   const handleSaveAsFile = useCallback(() => {
@@ -221,10 +234,13 @@ export function ClipboardHistory() {
     saveAsFile(content, defaultName);
   }, [selectedEntry, saveAsFile]);
 
-  const handleDelete = useCallback(() => {
-    if (selectedId) {
-      deleteEntry(selectedId);
+  const handleDelete = useCallback(async () => {
+    if (!selectedId) return;
+    try {
+      await deleteEntry(selectedId);
       toast.add("Deleted");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [selectedId, deleteEntry, toast]);
 
@@ -232,10 +248,14 @@ export function ClipboardHistory() {
     setIsConfirmClearOpen(true);
   }, []);
 
-  const handleConfirmClear = useCallback(() => {
-    clearHistory();
+  const handleConfirmClear = useCallback(async () => {
     setIsConfirmClearOpen(false);
-    toast.add("History cleared");
+    try {
+      await clearHistory();
+      toast.add("History cleared");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
+    }
   }, [clearHistory, toast]);
 
   // --- Keyboard navigation ---
@@ -252,8 +272,8 @@ export function ClipboardHistory() {
       } else if (entry.text_content) {
         await pasteEntry(entry.text_content);
       }
-    } catch {
-      toast.add("Paste failed");
+    } catch (e) {
+      toast.add(parseAppError(e).message, "error");
     }
   }, [entries, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
 
@@ -532,8 +552,8 @@ export function ClipboardHistory() {
                             } else if (entry.text_content) {
                               await pasteEntry(entry.text_content);
                             }
-                          } catch {
-                            toast.add("Paste failed");
+                          } catch (e) {
+                            toast.add(parseAppError(e).message, "error");
                           }
                         }}
                       />

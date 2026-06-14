@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { useToastStore } from "../components/Toast";
+import { parseAppError } from "../lib/error";
 
 // IPC types are generated from the Rust structs — see src/bindings.ts,
 // regenerated via `cargo test export_typescript_bindings`. Imported for local
@@ -91,6 +93,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     } catch (e) {
       console.error("Failed to fetch clipboard entries:", e);
       set({ isLoading: false });
+      useToastStore.getState().add(parseAppError(e).message, "error");
     }
   },
 
@@ -147,6 +150,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to delete entry:", e);
+      throw e;
     }
   },
 
@@ -166,6 +170,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to toggle pin:", e);
+      throw e;
     }
   },
 
@@ -180,6 +185,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to update entry content:", e);
+      throw e;
     }
   },
 
@@ -188,6 +194,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       await invoke("append_to_clipboard", { text });
     } catch (e) {
       console.error("Failed to append to clipboard:", e);
+      throw e;
     }
   },
 
@@ -236,6 +243,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       }));
     } catch (e) {
       console.error("Failed to clear history:", e);
+      throw e;
     }
   },
 

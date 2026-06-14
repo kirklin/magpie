@@ -8,6 +8,7 @@ import { SettingToggle } from "../components/settings/SettingToggle";
 import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { ThemePicker } from "../components/settings/ThemePicker";
 import { useToastStore } from "../components/Toast";
+import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useSettingsStore } from "../stores/settings";
@@ -53,8 +54,13 @@ export function SettingsView() {
   };
 
   const handleClearHistory = async () => {
-    await clearHistory();
-    setShowClearConfirm(false);
+    try {
+      await clearHistory();
+    } catch (e) {
+      addToast(parseAppError(e).message, "error");
+    } finally {
+      setShowClearConfirm(false);
+    }
   };
 
   const handleExport = async () => {
@@ -65,7 +71,7 @@ export function SettingsView() {
         addToast(`已导出 ${count} 条记录`);
       }
     } catch (e) {
-      addToast(`导出失败: ${e}`, "error");
+      addToast(`导出失败: ${parseAppError(e).message}`, "error");
     } finally {
       setIsExporting(false);
     }
@@ -81,15 +87,19 @@ export function SettingsView() {
         addToast("没有新记录需要导入", "info");
       }
     } catch (e) {
-      addToast(`导入失败: ${e}`, "error");
+      addToast(`导入失败: ${parseAppError(e).message}`, "error");
     } finally {
       setIsImporting(false);
     }
   };
 
   const handleShortcutChange = async (shortcut: string) => {
-    await updateSetting("global_shortcut", shortcut);
-    addToast("快捷键已更新");
+    try {
+      await updateSetting("global_shortcut", shortcut);
+      addToast("快捷键已更新");
+    } catch (e) {
+      addToast(parseAppError(e).message, "error");
+    }
   };
 
   if (isLoading) {
