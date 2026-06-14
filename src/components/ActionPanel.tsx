@@ -12,6 +12,7 @@ import {
   Type,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { type StringKey, useT } from "../i18n";
 
 // --- Types ---
 
@@ -38,6 +39,7 @@ interface ActionPanelProps {
 // --- ActionPanel Component ---
 
 export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -135,7 +137,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
           <input
             ref={inputRef}
             className="flex-1 h-full bg-transparent border-none outline-none text-text-primary text-[13px] placeholder:text-text-tertiary font-sans"
-            placeholder="Search actions..."
+            placeholder={t("action.search_placeholder")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -153,7 +155,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
           {filtered.length === 0
             ? (
                 <div className="px-4 py-6 text-center text-text-tertiary text-sm">
-                  No matching actions
+                  {t("action.no_match")}
                 </div>
               )
             : isSearching
@@ -279,6 +281,8 @@ export interface BuildActionsConfig {
   } | null;
   /** Name of the active app to paste to */
   activeApp: string;
+  /** Translator (from useT) for action labels */
+  t: (key: StringKey, params?: Record<string, string | number>) => string;
   /** Callbacks */
   onPaste: () => void;
   onCopy: () => void;
@@ -299,6 +303,7 @@ export interface BuildActionsConfig {
  * Context-aware: shows "Open in Browser" only for URL entries.
  */
 export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGroup[] {
+  const { t } = config;
   const groups: ActionGroup[] = [];
 
   if (config.hasEntry && config.entry) {
@@ -310,14 +315,14 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     const pasteActions: Action[] = [
       {
         id: "paste",
-        label: `Paste to ${config.activeApp}`,
+        label: t("action.paste_to", { app: config.activeApp }),
         icon: <img src="/logo.png" alt="Magpie" className="w-[14px] h-[14px] object-contain rounded-[3px]" />,
         shortcut: ["↵"],
         onAction: config.onPaste,
       },
       {
         id: "copy",
-        label: "Copy to Clipboard",
+        label: t("action.copy"),
         icon: <Copy size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "↵"],
         onAction: config.onCopy,
@@ -327,7 +332,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     if (isText) {
       pasteActions.push({
         id: "paste-plain",
-        label: "Paste as Plain Text",
+        label: t("action.paste_plain"),
         icon: <Type size={14} className="text-text-secondary" />,
         shortcut: ["⇧", "↵"],
         onAction: config.onPastePlainText,
@@ -336,7 +341,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
 
     pasteActions.push({
       id: "paste-keep-window",
-      label: "Paste and Keep Window Open",
+      label: t("action.paste_keep"),
       icon: <ClipboardPaste size={14} className="text-text-secondary" />,
       shortcut: ["⌥", "↵"],
       onAction: config.onPasteKeepWindow,
@@ -350,7 +355,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     if (isUrl) {
       manageActions.push({
         id: "open-url",
-        label: "Open in Browser",
+        label: t("action.open_browser"),
         icon: <ExternalLink size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "O"],
         onAction: config.onOpenUrl,
@@ -360,7 +365,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     if (isText) {
       manageActions.push({
         id: "append",
-        label: "Append to Clipboard",
+        label: t("action.append"),
         icon: <ListPlus size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "⌥", "C"],
         onAction: config.onAppendToClipboard,
@@ -370,7 +375,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     if (isText) {
       manageActions.push({
         id: "edit-content",
-        label: "Edit Content",
+        label: t("action.edit"),
         icon: <Pencil size={14} className="text-text-secondary" />,
         shortcut: ["⌘", "E"],
         onAction: config.onEditContent,
@@ -379,7 +384,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
 
     manageActions.push({
       id: "pin",
-      label: isPinned ? "Unpin" : "Pin to Top",
+      label: isPinned ? t("action.unpin") : t("action.pin"),
       icon: isPinned ? <PinOff size={14} className="text-text-secondary" /> : <Pin size={14} className="text-text-secondary" />,
       shortcut: ["⌘", "."],
       onAction: config.onTogglePin,
@@ -387,7 +392,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
 
     manageActions.push({
       id: "save-as-file",
-      label: "Save as File...",
+      label: t("action.save_file"),
       icon: <FileDown size={14} className="text-text-secondary" />,
       shortcut: ["⌘", "S"],
       onAction: config.onSaveAsFile,
@@ -400,7 +405,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       actions: [
         {
           id: "delete",
-          label: "Delete",
+          label: t("action.delete"),
           icon: <Trash2 size={14} />,
           shortcut: ["⌘", "⌫"],
           danger: true,
@@ -415,7 +420,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     actions: [
       {
         id: "clear",
-        label: "Clear All History",
+        label: t("action.clear_all"),
         icon: <Eraser size={14} />,
         shortcut: ["⇧", "⌘", "⌫"],
         danger: true,

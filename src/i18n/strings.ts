@@ -59,6 +59,72 @@ export const STRINGS = {
 
     // common
     "common.cancel": "取消",
+    "common.confirm": "确认",
+    "common.save": "保存",
+    "common.loading": "加载中…",
+
+    // settings labels (theme / accent pickers)
+    "settings.theme_label": "主题",
+    "settings.accent_label": "主题色",
+
+    // edit content modal
+    "edit.chars_lines": "{chars} 字符 · {lines} 行",
+    "edit.modified": "已修改",
+
+    // search filter dropdown
+    "filter.all": "全部类型",
+    "filter.text": "文本",
+    "filter.image": "图片",
+    "filter.file": "文件",
+    "filter.url": "链接",
+    "filter.color": "颜色",
+    "filter.code": "代码",
+    "filter.email": "邮箱",
+    "search.placeholder": "输入以筛选条目…",
+
+    // action panel
+    "action.paste_to": "粘贴到 {app}",
+    "action.append": "追加到剪贴板",
+    "action.no_match": "没有匹配的操作",
+
+    // content type labels (classifier.getTypeLabel)
+    "type.text": "文本",
+    "type.url": "链接",
+    "type.code": "代码片段",
+    "type.image": "图片",
+    "type.color": "颜色值",
+    "type.email": "邮箱地址",
+    "type.file": "文件",
+
+    // preview panel
+    "about.title": "关于 Magpie",
+    "about.tagline": "极简的跨平台剪贴板管理器",
+    "preview.select_entry": "选择一个条目查看详情",
+    "preview.cannot_preview": "无法预览(文件可能已被移动或删除)",
+    "preview.pdf_title": "PDF 预览",
+    "preview.load_failed": "无法加载文本预览。",
+    "preview.truncated": "…(预览已截断)",
+    "preview.badge_email": "邮箱地址",
+    "preview.badge_weblink": "网页链接",
+    "preview.badge_code": "代码",
+    "preview.info": "信息",
+    "preview.today_at": "今天 {time}",
+    "preview.yesterday_at": "昨天 {time}",
+    "info.source": "来源",
+    "info.content_type": "类型",
+    "info.path": "路径",
+    "info.files": "文件数",
+    "info.file_size": "文件大小",
+    "info.characters": "字符数",
+    "info.words": "词数",
+    "info.lines": "行数",
+    "info.size": "尺寸",
+    "info.times_copied": "复制次数",
+    "info.last_copied": "最近复制",
+    "info.first_copied": "首次复制",
+    "info.copied": "复制于",
+    "info.status": "状态",
+    "info.pinned": "已置顶",
 
     // theme picker
     "theme.light": "浅色",
@@ -95,6 +161,9 @@ export const STRINGS = {
     "ui.clear_all_history": "清空全部历史",
     "ui.search_placeholder": "搜索…",
     "ui.clear": "清除",
+    "ui.filter": "筛选",
+    "ui.clear_all": "清空全部",
+    "ui.clear_confirm_message": "所有剪贴板历史将被永久删除，已置顶的条目会保留。",
 
     // action panel
     "action.search_placeholder": "搜索操作…",
@@ -177,6 +246,72 @@ export const STRINGS = {
 
     // common
     "common.cancel": "Cancel",
+    "common.confirm": "Confirm",
+    "common.save": "Save",
+    "common.loading": "Loading…",
+
+    // settings labels (theme / accent pickers)
+    "settings.theme_label": "Theme",
+    "settings.accent_label": "Accent color",
+
+    // edit content modal
+    "edit.chars_lines": "{chars} characters · {lines} lines",
+    "edit.modified": "Modified",
+
+    // search filter dropdown
+    "filter.all": "All Types",
+    "filter.text": "Text",
+    "filter.image": "Images",
+    "filter.file": "Files",
+    "filter.url": "Links",
+    "filter.color": "Colors",
+    "filter.code": "Code",
+    "filter.email": "Emails",
+    "search.placeholder": "Type to filter entries…",
+
+    // action panel
+    "action.paste_to": "Paste to {app}",
+    "action.append": "Append to Clipboard",
+    "action.no_match": "No matching actions",
+
+    // content type labels (classifier.getTypeLabel)
+    "type.text": "Text",
+    "type.url": "Link",
+    "type.code": "Code Snippet",
+    "type.image": "Image",
+    "type.color": "Color Code",
+    "type.email": "Email Address",
+    "type.file": "File",
+
+    // preview panel
+    "about.title": "About Magpie",
+    "about.tagline": "A minimal cross-platform clipboard manager",
+    "preview.select_entry": "Select an entry to view details",
+    "preview.cannot_preview": "Can't preview (file may have been moved or deleted)",
+    "preview.pdf_title": "PDF Preview",
+    "preview.load_failed": "Failed to load text preview.",
+    "preview.truncated": "… (preview truncated)",
+    "preview.badge_email": "Email Address",
+    "preview.badge_weblink": "Web Link",
+    "preview.badge_code": "Code",
+    "preview.info": "Information",
+    "preview.today_at": "Today at {time}",
+    "preview.yesterday_at": "Yesterday at {time}",
+    "info.source": "Source",
+    "info.content_type": "Content type",
+    "info.path": "Path",
+    "info.files": "Files",
+    "info.file_size": "File size",
+    "info.characters": "Characters",
+    "info.words": "Words",
+    "info.lines": "Lines",
+    "info.size": "Size",
+    "info.times_copied": "Times copied",
+    "info.last_copied": "Last copied",
+    "info.first_copied": "First copied",
+    "info.copied": "Copied",
+    "info.status": "Status",
+    "info.pinned": "Pinned",
 
     "theme.light": "Light",
     "theme.dark": "Dark",
@@ -208,6 +343,9 @@ export const STRINGS = {
     "ui.clear_all_history": "Clear all history",
     "ui.search_placeholder": "Search…",
     "ui.clear": "Clear",
+    "ui.filter": "Filter",
+    "ui.clear_all": "Clear All",
+    "ui.clear_confirm_message": "All clipboard history will be permanently deleted. Pinned items will be kept.",
 
     "action.search_placeholder": "Search actions…",
     "action.paste": "Paste",

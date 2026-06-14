@@ -2,6 +2,7 @@ import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Files, Pin } from "lucide-react";
 import { useState } from "react";
+import { useLocale, useT } from "../i18n";
 import { getTypeIcon } from "../utils/classifier";
 import { NativeFileIcon } from "./PreviewPanel";
 
@@ -15,6 +16,8 @@ interface ClipboardItemProps {
 }
 
 export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onDoubleClick }: ClipboardItemProps) {
+  const t = useT();
+  const locale = useLocale();
   const typeIcon = getTypeIcon(entry.content_type);
   // Falls back to a non-image icon when the referenced file/image can't load
   // (e.g. the source file was deleted), instead of showing a broken thumbnail.
@@ -24,7 +27,7 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
   const isColor = entry.content_type === "color";
 
   // Build display name based on content type
-  let displayName = entry.custom_name || entry.content_preview || entry.text_content || "(空)";
+  let displayName = entry.custom_name || entry.content_preview || entry.text_content || t("item.empty");
   let fileImagePath: string | null = null;
   let parsedPaths: string[] = [];
   if (isFile && entry.file_paths) {
@@ -38,9 +41,10 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
           // copying e.g. 100 files would build a huge label and hover title.
           const names = parsedPaths.map(p => p.split("/").pop() || p);
           const MAX_NAMES = 3;
+          const sep = locale === "zh" ? "、" : ", ";
           displayName = names.length > MAX_NAMES
-            ? `${names.slice(0, MAX_NAMES).join("、")} 等 ${names.length} 个文件`
-            : names.join("、");
+            ? t("item.files_summary", { names: names.slice(0, MAX_NAMES).join(sep), n: names.length })
+            : names.join(sep);
         }
       }
       // Only real images get an inline <img> thumbnail. Videos are intentionally

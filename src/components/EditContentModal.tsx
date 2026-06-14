@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "../i18n";
 
 interface EditContentModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface EditContentModalProps {
  * Uses a full-height textarea with monospace font for code editing comfort.
  */
 export function EditContentModal({ isOpen, initialContent, onSave, onClose }: EditContentModalProps) {
+  const t = useT();
   const [content, setContent] = useState(initialContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,13 +71,13 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
       <div className="fixed inset-4 z-50 flex flex-col bg-bg-secondary/98 backdrop-blur-xl border border-border rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] animate-scale-in overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-11 border-b border-border shrink-0">
-          <span className="text-[13px] font-medium text-text-primary">Edit Content</span>
+          <span className="text-[13px] font-medium text-text-primary">{t("action.edit")}</span>
           <div className="flex items-center gap-2">
             <button
               className="px-3 py-1 text-[12px] text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-hover"
               onClick={onClose}
             >
-              Cancel
+              {t("common.cancel")}
               <kbd className="ml-1.5 text-[10px] text-text-tertiary">Esc</kbd>
             </button>
             <button
@@ -87,7 +89,7 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
               onClick={handleSave}
               disabled={!hasChanged}
             >
-              Save
+              {t("common.save")}
               <kbd className="ml-1.5 text-[10px] opacity-60">⌘S</kbd>
             </button>
           </div>
@@ -107,10 +109,10 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
         {/* Footer info */}
         <div className="flex items-center justify-between px-4 h-8 border-t border-border shrink-0">
           <span className="text-[11px] text-text-tertiary">
-            {content.length} characters · {content.split("\n").length} lines
+            {t("edit.chars_lines", { chars: content.length, lines: content.split("\n").length })}
           </span>
           {hasChanged && (
-            <span className="text-[11px] text-orange-400/60">Modified</span>
+            <span className="text-[11px] text-orange-400/60">{t("edit.modified")}</span>
           )}
         </div>
       </div>

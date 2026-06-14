@@ -14,6 +14,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
 import { ToastContainer, useToastStore } from "../components/Toast";
+import { useLocale, useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
@@ -52,6 +53,8 @@ export function ClipboardHistory() {
   } = useClipboardStore();
   const { navigateTo } = useNavigationStore();
   const toast = useToastStore();
+  const t = useT();
+  const locale = useLocale();
 
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -73,7 +76,7 @@ export function ClipboardHistory() {
   );
 
   // Group entries by date
-  const groupedEntries = useMemo(() => groupByDate(entries), [entries]);
+  const groupedEntries = useMemo(() => groupByDate(entries, locale), [entries, locale]);
 
   // Flatten the date groups into a single row list (header rows + item rows)
   // so the list can be virtualized. Item rows carry their flat index (position
@@ -149,7 +152,7 @@ export function ClipboardHistory() {
       } else {
         return;
       }
-      toast.add("Copied to clipboard");
+      toast.add(t("toast.copied"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -176,7 +179,7 @@ export function ClipboardHistory() {
       } else {
         return;
       }
-      toast.add("Pasted (window kept open)");
+      toast.add(t("toast.pasted_kept"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -191,7 +194,7 @@ export function ClipboardHistory() {
     if (!selectedEntry?.text_content) return;
     try {
       await appendToClipboard(selectedEntry.text_content);
-      toast.add("Appended to clipboard");
+      toast.add(t("toast.appended"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -206,7 +209,7 @@ export function ClipboardHistory() {
     if (!selectedId) return;
     try {
       await updateEntryContent(selectedId, content);
-      toast.add("Content updated");
+      toast.add(t("toast.content_updated"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -217,7 +220,7 @@ export function ClipboardHistory() {
     const wasPinned = selectedEntry?.is_pinned;
     try {
       await togglePin(selectedId);
-      toast.add(wasPinned ? "Unpinned" : "Pinned to top");
+      toast.add(wasPinned ? t("toast.unpinned") : t("toast.pinned"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -241,7 +244,7 @@ export function ClipboardHistory() {
     if (!selectedId) return;
     try {
       await deleteEntry(selectedId);
-      toast.add("Deleted");
+      toast.add(t("toast.deleted"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -255,7 +258,7 @@ export function ClipboardHistory() {
     setIsConfirmClearOpen(false);
     try {
       await clearHistory();
-      toast.add("History cleared");
+      toast.add(t("toast.history_cleared"));
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
@@ -470,6 +473,7 @@ export function ClipboardHistory() {
       is_pinned: selectedEntry.is_pinned,
     } : null,
     activeApp,
+    t,
     onPaste: handlePaste,
     onCopy: handleCopy,
     onPastePlainText: handlePastePlainText,
@@ -482,7 +486,7 @@ export function ClipboardHistory() {
     onDelete: handleDelete,
     onClearHistory: handleClearHistory,
   }), [
-    selectedEntry, activeApp,
+    selectedEntry, activeApp, t,
     handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
     handleOpenUrl, handleAppendToClipboard, handleEditContent,
     handleTogglePin, handleSaveAsFile, handleDelete, handleClearHistory,
@@ -513,8 +517,8 @@ export function ClipboardHistory() {
           {entries.length === 0
             ? (
                 <EmptyState
-                  title={searchQuery ? "没有找到匹配的内容" : "剪贴板历史为空"}
-                  subtitle={searchQuery ? "试试其他关键词" : "复制一些内容开始吧"}
+                  title={searchQuery ? t("empty.no_match_title") : t("empty.empty_title")}
+                  subtitle={searchQuery ? t("empty.no_match_desc") : t("empty.empty_desc")}
                   icon={searchQuery ? "search" : "clipboard"}
                 />
               )
@@ -608,7 +612,7 @@ export function ClipboardHistory() {
             onClick={() => searchBarRef.current?.toggleFilter()}
           >
             <Filter className="w-3.5 h-3.5" />
-            Filter
+            {t("ui.filter")}
             <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
             <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">F</kbd>
           </button>
@@ -616,7 +620,7 @@ export function ClipboardHistory() {
           <button
             className="flex items-center justify-center w-5 h-5 text-text-secondary hover:text-text-primary transition-colors"
             onClick={() => navigateTo("settings")}
-            title="Settings"
+            title={t("ui.settings")}
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -641,9 +645,9 @@ export function ClipboardHistory() {
       {/* Confirm Clear History Modal */}
       <ConfirmModal
         isOpen={isConfirmClearOpen}
-        title="Clear All History"
-        message="All clipboard history will be permanently deleted. Pinned items will be kept."
-        confirmLabel="Clear All"
+        title={t("ui.clear_all_history")}
+        message={t("ui.clear_confirm_message")}
+        confirmLabel={t("ui.clear_all")}
         onConfirm={handleConfirmClear}
         onCancel={() => setIsConfirmClearOpen(false)}
       />

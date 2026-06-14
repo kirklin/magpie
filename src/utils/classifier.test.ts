@@ -3,18 +3,18 @@ import { getTypeIcon, getTypeLabel } from "./classifier";
 
 describe("getTypeLabel", () => {
   it("maps each known content type to its label", () => {
-    expect(getTypeLabel("text")).toBe("Text");
-    expect(getTypeLabel("url")).toBe("Link");
-    expect(getTypeLabel("code")).toBe("Code Snippet");
-    expect(getTypeLabel("image")).toBe("Image");
-    expect(getTypeLabel("color")).toBe("Color Code");
-    expect(getTypeLabel("email")).toBe("Email Address");
-    expect(getTypeLabel("file")).toBe("File");
+    expect(getTypeLabel("text", "en")).toBe("Text");
+    expect(getTypeLabel("url", "en")).toBe("Link");
+    expect(getTypeLabel("code", "en")).toBe("Code Snippet");
+    expect(getTypeLabel("image", "en")).toBe("Image");
+    expect(getTypeLabel("color", "en")).toBe("Color Code");
+    expect(getTypeLabel("email", "en")).toBe("Email Address");
+    expect(getTypeLabel("file", "en")).toBe("File");
   });
 
   it("falls back to Text for unknown types", () => {
-    expect(getTypeLabel("richtext")).toBe("Text");
-    expect(getTypeLabel("")).toBe("Text");
+    expect(getTypeLabel("richtext", "en")).toBe("Text");
+    expect(getTypeLabel("", "en")).toBe("Text");
   });
 });
 

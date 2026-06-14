@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Code, FileText, Image, Layers, Link, Mail, Palette, Search, Type } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { type StringKey, useT } from "../i18n";
 
 interface SearchBarProps {
   value: string;
@@ -15,19 +16,20 @@ export interface SearchBarRef {
   focus: () => void;
 }
 
-const FILTER_OPTIONS: { value: string | null; label: string; icon: React.ReactNode }[] = [
-  { value: null, label: "All Types", icon: <Layers size={14} /> },
-  { value: "text", label: "Text", icon: <Type size={14} /> },
-  { value: "image", label: "Images", icon: <Image size={14} /> },
-  { value: "file", label: "Files", icon: <FileText size={14} /> },
-  { value: "url", label: "Links", icon: <Link size={14} /> },
-  { value: "color", label: "Colors", icon: <Palette size={14} /> },
-  { value: "code", label: "Code", icon: <Code size={14} /> },
-  { value: "email", label: "Emails", icon: <Mail size={14} /> },
+const FILTER_OPTIONS: { value: string | null; labelKey: StringKey; icon: React.ReactNode }[] = [
+  { value: null, labelKey: "filter.all", icon: <Layers size={14} /> },
+  { value: "text", labelKey: "filter.text", icon: <Type size={14} /> },
+  { value: "image", labelKey: "filter.image", icon: <Image size={14} /> },
+  { value: "file", labelKey: "filter.file", icon: <FileText size={14} /> },
+  { value: "url", labelKey: "filter.url", icon: <Link size={14} /> },
+  { value: "color", labelKey: "filter.color", icon: <Palette size={14} /> },
+  { value: "code", labelKey: "filter.code", icon: <Code size={14} /> },
+  { value: "email", labelKey: "filter.email", icon: <Mail size={14} /> },
 ];
 
 export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
-  ({ value, onChange, onCompositionChange, activeFilter, onFilterChange, placeholder = "Type to filter entries…" }, ref) => {
+  ({ value, onChange, onCompositionChange, activeFilter, onFilterChange, placeholder }, ref) => {
+    const t = useT();
     const inputRef = useRef<HTMLInputElement>(null);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -112,7 +114,8 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
       focus: () => inputRef.current?.focus(),
     }));
 
-    const currentFilterLabel = FILTER_OPTIONS.find(o => o.value === activeFilter)?.label || "All Types";
+    const currentFilterOption = FILTER_OPTIONS.find(o => o.value === activeFilter);
+    const currentFilterLabel = t(currentFilterOption?.labelKey ?? "filter.all");
 
     return (
       <div className="drag-region flex items-center h-12 px-4 gap-3 border-b border-border shrink-0 relative">
@@ -131,7 +134,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
             // Ensure the final composed value triggers a search
             onChange((e.target as HTMLInputElement).value);
           }}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t("search.placeholder")}
           spellCheck={false}
           autoComplete="off"
         />
@@ -140,7 +143,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
             className="no-drag w-5 h-5 flex items-center justify-center border-none bg-bg-tertiary text-text-secondary rounded-full text-[10px] transition-all duration-100 hover:bg-bg-active hover:text-text-primary shrink-0"
             onMouseDown={e => e.preventDefault()}
             onClick={() => onChange("")}
-            title="清除"
+            title={t("ui.clear")}
           >
             ✕
           </button>
@@ -185,7 +188,7 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
                   >
                     <span className="flex items-center gap-2.5">
                       <span className={index === highlightedIndex ? "text-text-primary" : "text-text-tertiary"}>{option.icon}</span>
-                      {option.label}
+                      {t(option.labelKey)}
                     </span>
                     {activeFilter === option.value && <Check size={14} className="text-accent" />}
                   </button>

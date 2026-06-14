@@ -1,8 +1,10 @@
+import type { Locale } from "../i18n";
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Pin } from "lucide-react";
 import Prism from "prismjs";
 import React, { useEffect, useState } from "react";
+import { t, useLocale, useT } from "../i18n";
 import { getTypeLabel } from "../utils/classifier";
 import "prismjs/themes/prism-tomorrow.css";
 
@@ -74,6 +76,7 @@ function formatFileSize(bytes: number): string {
 
 /** Renders a preview for a single file based on its type */
 function FilePreview({ filePath }: { filePath: string }) {
+  const t = useT();
   const category = getFileCategory(filePath);
   const src = convertFileSrc(filePath);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -86,12 +89,12 @@ function FilePreview({ filePath }: { filePath: string }) {
         .then((text) => {
           if (!cancelled) {
             // Limit preview to ~10000 characters to avoid performance issues
-            setTextContent(text.length > 10000 ? `${text.substring(0, 10000)}\n\n... (preview truncated)` : text);
+            setTextContent(text.length > 10000 ? `${text.substring(0, 10000)}\n\n${t("preview.truncated")}` : text);
           }
         })
         .catch(() => {
           if (!cancelled) {
-            setTextContent("Failed to load text preview.");
+            setTextContent(t("preview.load_failed"));
           }
         });
       return () => {
@@ -133,14 +136,14 @@ function FilePreview({ filePath }: { filePath: string }) {
           key={src}
           src={`${src}?t=${Date.now()}`}
           className="w-full h-full rounded-lg border-0 bg-white"
-          title="PDF Preview"
+          title={t("preview.pdf_title")}
         />
       );
     case "text":
       return (
         <div className="w-full h-full overflow-auto bg-bg-secondary rounded-lg p-3 border border-border">
           <pre className="text-[12px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
-            {textContent === null ? "Loading..." : textContent}
+            {textContent === null ? t("common.loading") : textContent}
           </pre>
         </div>
       );
@@ -244,6 +247,7 @@ export function NativeFileIcon({ filePath, className = "w-16 h-16" }: { filePath
  * or moved after being copied).
  */
 function AssetImage({ filePath, alt = "", className }: { filePath: string; alt?: string; className?: string }) {
+  const t = useT();
   const [failed, setFailed] = useState(false);
 
   if (failed) {
@@ -253,7 +257,7 @@ function AssetImage({ filePath, alt = "", className }: { filePath: string; alt?:
         <NativeFileIcon filePath={filePath} className="w-32 h-32 drop-shadow-md" />
         <div className="text-center px-4">
           <div className="text-[14px] font-medium text-text-primary break-all">{fileName}</div>
-          <div className="text-[12px] text-text-tertiary mt-1">无法预览(文件可能已被移动或删除)</div>
+          <div className="text-[12px] text-text-tertiary mt-1">{t("preview.cannot_preview")}</div>
         </div>
       </div>
     );
@@ -274,6 +278,8 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ entry }: PreviewPanelProps) {
+  const t = useT();
+  const locale = useLocale();
   if (!entry) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
@@ -286,7 +292,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
             </svg>
           </div>
         </div>
-        <span className="text-[13px] text-text-secondary/80 font-medium">选择一个条目查看详情</span>
+        <span className="text-[13px] text-text-secondary/80 font-medium">{t("preview.select_entry")}</span>
       </div>
     );
   }
@@ -402,7 +408,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                           )}
                         </div>
                         <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
-                          Email Address
+                          {t("preview.badge_email")}
                         </div>
                       </div>
                     );
@@ -438,7 +444,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                             )}
                           </div>
                           <div className="mt-5 px-3 py-1 bg-bg-secondary/60 border border-border rounded-md text-[11px] font-medium text-text-tertiary tracking-widest uppercase shadow-sm">
-                            Web Link
+                            {t("preview.badge_weblink")}
                           </div>
                         </div>
                       );
@@ -460,14 +466,14 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                               />
                             </pre>
                             <div className="absolute top-3 right-3 px-2 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md text-[10px] font-mono text-white/60 uppercase tracking-widest pointer-events-none shadow-sm">
-                              Code
+                              {t("preview.badge_code")}
                             </div>
                           </div>
                         );
                       })()
                     : (
                         <pre className="text-[13px] text-text-primary font-sans whitespace-pre-wrap break-words leading-relaxed select-text cursor-text">
-                          {content || "(无文本内容)"}
+                          {content || t("preview.no_text")}
                         </pre>
                       )}
       </div>
@@ -475,12 +481,12 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
       {/* Information section */}
       <div className="border-t border-border shrink-0">
         <div className="px-4 py-2 text-[11px] text-text-tertiary font-semibold uppercase tracking-wider">
-          Information
+          {t("preview.info")}
         </div>
         <div className="px-4 pb-3 space-y-1">
           {entry.source_app && entry.source_app_name && (
             <InfoRow
-              label="Source"
+              label={t("info.source")}
               value={(
                 <span className="flex items-center gap-1.5">
                   <NativeAppIcon bundleId={entry.source_app} appName={entry.source_app_name} />
@@ -489,40 +495,40 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
               )}
             />
           )}
-          <InfoRow label="Content type" value={getTypeLabel(entry.content_type)} />
+          <InfoRow label={t("info.content_type")} value={getTypeLabel(entry.content_type, locale)} />
           {isFile && filePaths.length === 1 && (
-            <InfoRow label="Path" value={shortenPath(filePaths[0])} />
+            <InfoRow label={t("info.path")} value={shortenPath(filePaths[0])} />
           )}
           {isFile && filePaths.length > 1 && (
-            <InfoRow label="Files" value={filePaths.length.toString()} />
+            <InfoRow label={t("info.files")} value={filePaths.length.toString()} />
           )}
           {isFile && entry.byte_size > 0 && (
-            <InfoRow label="File size" value={formatFileSize(entry.byte_size)} />
+            <InfoRow label={t("info.file_size")} value={formatFileSize(entry.byte_size)} />
           )}
-          {!isImage && !isFile && <InfoRow label="Characters" value={charCount.toLocaleString()} />}
-          {wordCount > 0 && <InfoRow label="Words" value={wordCount.toLocaleString()} />}
-          {lineCount > 1 && <InfoRow label="Lines" value={lineCount.toLocaleString()} />}
-          {isImage && entry.content_preview && <InfoRow label="Size" value={entry.content_preview} />}
+          {!isImage && !isFile && <InfoRow label={t("info.characters")} value={charCount.toLocaleString()} />}
+          {wordCount > 0 && <InfoRow label={t("info.words")} value={wordCount.toLocaleString()} />}
+          {lineCount > 1 && <InfoRow label={t("info.lines")} value={lineCount.toLocaleString()} />}
+          {isImage && entry.content_preview && <InfoRow label={t("info.size")} value={entry.content_preview} />}
           {entry.access_count > 1
             ? (
                 <>
-                  <InfoRow label="Times copied" value={entry.access_count.toLocaleString()} />
-                  <InfoRow label="Last copied" value={formatCopiedTime(entry.accessed_at)} />
-                  <InfoRow label="First copied" value={formatCopiedTime(entry.created_at)} />
+                  <InfoRow label={t("info.times_copied")} value={entry.access_count.toLocaleString()} />
+                  <InfoRow label={t("info.last_copied")} value={formatCopiedTime(entry.accessed_at, locale)} />
+                  <InfoRow label={t("info.first_copied")} value={formatCopiedTime(entry.created_at, locale)} />
                 </>
               )
             : (
-                <InfoRow label="Copied" value={formatCopiedTime(entry.created_at)} />
+                <InfoRow label={t("info.copied")} value={formatCopiedTime(entry.created_at, locale)} />
               )}
           {entry.is_pinned && (
             <InfoRow
-              label="Status"
-              value={
+              label={t("info.status")}
+              value={(
                 <span className="inline-flex items-center gap-1 text-text-secondary">
                   <Pin size={12} className="shrink-0" />
-                  Pinned
+                  {t("info.pinned")}
                 </span>
-              }
+              )}
             />
           )}
         </div>
@@ -540,22 +546,23 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function formatCopiedTime(dateStr: string): string {
+function formatCopiedTime(dateStr: string, locale: Locale): string {
   const date = new Date(`${dateStr}Z`);
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
+  const intlLocale = locale === "zh" ? "zh-CN" : "en-US";
 
-  const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const time = date.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   if (isToday) {
-    return `Today at ${time}`;
+    return t(locale, "preview.today_at", { time });
   }
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${time}`;
+    return t(locale, "preview.yesterday_at", { time });
   }
 
-  return `${date.toLocaleDateString("zh-CN")} ${time}`;
+  return `${date.toLocaleDateString(intlLocale)} ${time}`;
 }

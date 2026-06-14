@@ -5,15 +5,16 @@ import { create } from "zustand";
 
 export type ThemeMode = "system" | "dark" | "light";
 
-/** Predefined accent color presets (oklch hue values) */
+/** Predefined accent color presets (oklch hue values). Display names are
+ *  resolved per-locale via the i18n `color.*` keys (see AccentColorPicker). */
 export const ACCENT_PRESETS = [
-  { id: "blue", hue: 260, label: "蓝色", swatch: "oklch(0.65 0.18 260)" },
-  { id: "purple", hue: 290, label: "紫色", swatch: "oklch(0.65 0.18 290)" },
-  { id: "pink", hue: 340, label: "粉色", swatch: "oklch(0.65 0.18 340)" },
-  { id: "red", hue: 25, label: "红色", swatch: "oklch(0.65 0.18 25)" },
-  { id: "orange", hue: 55, label: "橙色", swatch: "oklch(0.72 0.18 55)" },
-  { id: "green", hue: 150, label: "绿色", swatch: "oklch(0.65 0.18 150)" },
-  { id: "teal", hue: 195, label: "青色", swatch: "oklch(0.65 0.15 195)" },
+  { id: "blue", hue: 260, swatch: "oklch(0.65 0.18 260)" },
+  { id: "purple", hue: 290, swatch: "oklch(0.65 0.18 290)" },
+  { id: "pink", hue: 340, swatch: "oklch(0.65 0.18 340)" },
+  { id: "red", hue: 25, swatch: "oklch(0.65 0.18 25)" },
+  { id: "orange", hue: 55, swatch: "oklch(0.72 0.18 55)" },
+  { id: "green", hue: 150, swatch: "oklch(0.65 0.18 150)" },
+  { id: "teal", hue: 195, swatch: "oklch(0.65 0.15 195)" },
 ] as const;
 
 export type AccentColorId = typeof ACCENT_PRESETS[number]["id"];

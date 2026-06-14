@@ -3,10 +3,12 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingRow } from "../components/settings/SettingRow";
+import { useT } from "../i18n";
 import { useNavigationStore } from "../stores/navigation";
 
 export function AboutView() {
   const { navigateTo } = useNavigationStore();
+  const t = useT();
   const [version, setVersion] = useState("...");
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function AboutView() {
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="ml-2 font-medium text-sm text-text-primary">
-          关于 Magpie
+          {t("about.title")}
         </div>
       </div>
 
@@ -44,14 +46,14 @@ export function AboutView() {
       <div className="flex-1 overflow-y-auto px-8 pb-10 flex flex-col items-center">
         <img src="/logo.png" alt="Magpie Logo" className="w-28 h-28 mb-3 mt-6 drop-shadow-2xl" />
         <h1 className="text-2xl font-bold text-text-primary mb-1">Magpie</h1>
-        <p className="text-[11px] text-text-secondary mb-8">极简的跨平台剪贴板管理器</p>
+        <p className="text-[11px] text-text-secondary mb-8">{t("about.tagline")}</p>
 
         <div className="w-full">
           <SettingGroup>
-            <SettingRow label="名称" value="Magpie" />
-            <SettingRow label="版本" value={`v${version}`} />
+            <SettingRow label={t("about.name")} value="Magpie" />
+            <SettingRow label={t("about.version")} value={`v${version}`} />
             <SettingRow
-              label="开发者"
+              label={t("about.developer")}
               value={(
                 <button
                   className="transition-colors hover:text-text-primary"
@@ -62,7 +64,7 @@ export function AboutView() {
               )}
             />
             <SettingRow
-              label="开源仓库"
+              label={t("about.repo")}
               value={(
                 <button
                   className="transition-colors hover:text-text-primary"

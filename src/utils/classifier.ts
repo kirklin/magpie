@@ -1,16 +1,17 @@
 import { Code2, File, FileText, Image as ImageIcon, Link2, Mail, Palette, Type } from "lucide-react";
 import React from "react";
+import { type Locale, t } from "../i18n";
 
-export function getTypeLabel(type: string): string {
+export function getTypeLabel(type: string, locale: Locale = "zh"): string {
   switch (type) {
-    case "text": return "Text";
-    case "url": return "Link";
-    case "code": return "Code Snippet";
-    case "image": return "Image";
-    case "color": return "Color Code";
-    case "email": return "Email Address";
-    case "file": return "File";
-    default: return "Text";
+    case "text": return t(locale, "type.text");
+    case "url": return t(locale, "type.url");
+    case "code": return t(locale, "type.code");
+    case "image": return t(locale, "type.image");
+    case "color": return t(locale, "type.color");
+    case "email": return t(locale, "type.email");
+    case "file": return t(locale, "type.file");
+    default: return t(locale, "type.text");
   }
 }
 

@@ -1,4 +1,5 @@
 import type { ThemeMode } from "../../stores/settings";
+import { type StringKey, useT } from "../../i18n";
 
 interface ThemePickerProps {
   value: ThemeMode;
@@ -39,18 +40,19 @@ function MiniWindow({ isDark }: { isDark: boolean }) {
   );
 }
 
-const THEMES: { key: ThemeMode; label: string }[] = [
-  { key: "light", label: "浅色" },
-  { key: "dark", label: "深色" },
-  { key: "system", label: "自动" },
+const THEMES: { key: ThemeMode; labelKey: StringKey }[] = [
+  { key: "light", labelKey: "theme.light" },
+  { key: "dark", labelKey: "theme.dark" },
+  { key: "system", labelKey: "theme.system" },
 ];
 
 export function ThemePicker({ value, onChange }: ThemePickerProps) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between px-4 py-3 min-h-[44px]">
-      <span className="text-[13px] text-text-primary">主题</span>
+      <span className="text-[13px] text-text-primary">{t("settings.theme_label")}</span>
       <div className="flex items-start gap-3">
-        {THEMES.map(({ key, label }) => {
+        {THEMES.map(({ key, labelKey }) => {
           const isActive = value === key;
           return (
             <button
@@ -84,11 +86,10 @@ export function ThemePicker({ value, onChange }: ThemePickerProps) {
                         </div>
                       </div>
                     )
-                  : <MiniWindow isDark={key === "dark"} />
-                }
+                  : <MiniWindow isDark={key === "dark"} />}
               </div>
               <span className={`text-[10px] transition-colors ${isActive ? "text-accent" : "text-text-tertiary"}`}>
-                {label}
+                {t(labelKey)}
               </span>
             </button>
           );

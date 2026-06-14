@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
+import { useT } from "../i18n";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -18,10 +19,11 @@ export function ConfirmModal({
   isOpen,
   title,
   message,
-  confirmLabel = "Confirm",
+  confirmLabel,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const t = useT();
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -72,14 +74,14 @@ export function ConfirmModal({
             className="px-3 py-1.5 text-[13px] text-text-secondary hover:text-text-primary rounded-lg hover:bg-bg-hover transition-colors"
             onClick={onCancel}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             ref={confirmRef}
             className="px-3 py-1.5 text-[13px] text-white font-medium bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors outline-none"
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("common.confirm")}
           </button>
         </div>
       </div>
