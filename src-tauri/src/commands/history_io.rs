@@ -5,6 +5,7 @@ use tauri::AppHandle;
 use sqlx::Row;
 
 use crate::database::pool::get_pool;
+use crate::error::AppError;
 #[cfg(target_os = "macos")]
 use crate::clipboard::native;
 
@@ -41,9 +42,9 @@ struct ExportData {
 /// Returns the number of entries exported, or 0 if the user cancelled.
 #[tauri::command]
 #[specta::specta]
-pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, String> {
+pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, AppError> {
     // 1. Read all entries from the database
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+    let pool = get_pool(&app_handle).await?;
 
     let rows = sqlx::query(
         "SELECT content_type, text_content, html_content, image_path, file_paths, \
@@ -52,8 +53,7 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
          FROM clipboard_entries ORDER BY accessed_at DESC"
     )
         .fetch_all(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let entries: Vec<ExportedEntry> = rows.iter().map(|row| ExportedEntry {
         content_type: row.get("content_type"),
@@ -84,7 +84,7 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
     };
 
     let json = serde_json::to_string_pretty(&export_data)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
+        .map_err(|e| AppError::Other { message: format!("Failed to serialize: {}", e) })?;
 
     // 2. Show native save dialog and write the file to the chosen path.
     #[cfg(target_os = "macos")]
@@ -101,7 +101,7 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
 
     #[cfg(not(target_os = "macos"))]
     {
-        Err("Export not supported on this platform".to_string())
+        Err(AppError::Other { message: "Export not supported on this platform".to_string() })
     }
 }
 
@@ -109,7 +109,7 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
 /// Returns the number of entries imported (skipping duplicates).
 #[tauri::command]
 #[specta::specta]
-pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, String> {
+pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, AppError> {
     // 1. Show native open dialog to pick a JSON file and read it.
     let json_content: String;
 
@@ -126,19 +126,19 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
 
     #[cfg(not(target_os = "macos"))]
     {
-        return Err("Import not supported on this platform".to_string());
+        return Err(AppError::Other { message: "Import not supported on this platform".to_string() });
     }
 
     // 2. Parse the JSON
     let export_data: ExportData = serde_json::from_str(&json_content)
-        .map_err(|e| format!("无法解析导入文件: {}", e))?;
+        .map_err(|e| AppError::Validation { message: format!("无法解析导入文件: {}", e) })?;
 
     if export_data.app != "Magpie" {
-        return Err("不是有效的 Magpie 导出文件".to_string());
+        return Err(AppError::Validation { message: "不是有效的 Magpie 导出文件".to_string() });
     }
 
     // 3. Insert entries into the database, skipping duplicates
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+    let pool = get_pool(&app_handle).await?;
 
     let mut imported_count = 0u32;
 
@@ -171,8 +171,7 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, Stri
             .bind(&entry.accessed_at)
             .bind(entry.access_count)
             .execute(&pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         if result.rows_affected() > 0 {
             imported_count += 1;

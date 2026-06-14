@@ -1,4 +1,5 @@
 use crate::database::models::AppSettings;
+use crate::error::AppError;
 
 #[tauri::command]
 #[specta::specta]
@@ -9,15 +10,15 @@ pub fn get_default_settings() -> AppSettings {
 /// Show or hide the menu bar tray icon at runtime.
 #[tauri::command]
 #[specta::specta]
-pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(), String> {
+pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(), AppError> {
     use tauri::Manager;
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
         tray.set_visible(visible)
-            .map_err(|e| format!("Failed to set tray visible: {}", e))?;
+            .map_err(|e| AppError::Other { message: format!("Failed to set tray visible: {}", e) })?;
         log::info!("Menu bar icon visibility set to: {}", visible);
         Ok(())
     } else {
-        Err("Tray icon not found".to_string())
+        Err(AppError::Other { message: "Tray icon not found".to_string() })
     }
 }
 
@@ -33,7 +34,7 @@ const DEFAULT_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
 /// fails to bind, we fall back to the default shortcut and return an error.
 #[tauri::command]
 #[specta::specta]
-pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), String> {
+pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), AppError> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
     let global_shortcut = app_handle.global_shortcut();
@@ -41,12 +42,12 @@ pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) ->
     // Validate the format first — no side effects if this fails.
     let parsed: Shortcut = shortcut
         .parse()
-        .map_err(|_| format!("快捷键格式无效: {}", shortcut))?;
+        .map_err(|_| AppError::Validation { message: format!("快捷键格式无效: {}", shortcut) })?;
 
     // Now it's safe to drop the old binding and install the new one.
     global_shortcut
         .unregister_all()
-        .map_err(|e| format!("Failed to unregister shortcuts: {}", e))?;
+        .map_err(|e| AppError::Other { message: format!("Failed to unregister shortcuts: {}", e) })?;
 
     let handle = app_handle.clone();
     let register = global_shortcut.on_shortcut(parsed, move |_app, _shortcut, event| {
@@ -64,7 +65,7 @@ pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) ->
                 crate::toggle_window(&handle);
             }
         });
-        return Err(format!("无法注册快捷键 '{}': {}", shortcut, e));
+        return Err(AppError::Validation { message: format!("无法注册快捷键 '{}': {}", shortcut, e) });
     }
 
     log::info!("Global shortcut updated to: {}", shortcut);

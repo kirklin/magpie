@@ -7,6 +7,7 @@ use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::database::pool::get_pool;
 use crate::clipboard::native;
 use crate::clipboard::paste;
+use crate::error::AppError;
 use crate::platform::{ClipboardPort, PasterPort, WritePayload};
 
 #[tauri::command]
@@ -14,8 +15,8 @@ use crate::platform::{ClipboardPort, PasterPort, WritePayload};
 pub async fn get_clipboard_entries(
     app_handle: AppHandle,
     query: ClipboardQuery,
-) -> Result<Vec<ClipboardEntry>, String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+) -> Result<Vec<ClipboardEntry>, AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     let mut sql = String::from(
         "SELECT id, content_type, text_content, html_content, image_path, file_paths, \
@@ -52,10 +53,7 @@ pub async fn get_clipboard_entries(
         query_builder = query_builder.bind(val);
     }
 
-    let rows = query_builder
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rows = query_builder.fetch_all(&pool).await?;
 
     let entries: Vec<ClipboardEntry> = rows
         .iter()
@@ -85,8 +83,8 @@ pub async fn get_clipboard_entries(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<(), String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<(), AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     // Capture the image path first so we can remove the file after the row.
     let image_path: Option<String> = sqlx::query_scalar(
@@ -94,15 +92,13 @@ pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<()
     )
     .bind(id)
     .fetch_optional(&pool)
-    .await
-    .map_err(|e| e.to_string())?
+    .await?
     .flatten();
 
     sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
         .bind(id)
         .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     if let Some(path) = image_path {
         let _ = std::fs::remove_file(path);
@@ -112,8 +108,8 @@ pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
-pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     // Collect image files of the rows we're about to delete so they don't
     // become orphaned on disk.
@@ -122,13 +118,11 @@ pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String
          WHERE is_pinned = 0 AND image_path IS NOT NULL",
     )
     .fetch_all(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     sqlx::query("DELETE FROM clipboard_entries WHERE is_pinned = 0")
         .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     for path in image_paths {
         let _ = std::fs::remove_file(path);
@@ -138,20 +132,18 @@ pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), String
 
 #[tauri::command]
 #[specta::specta]
-pub async fn toggle_pin_entry(app_handle: AppHandle, id: i32) -> Result<bool, String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+pub async fn toggle_pin_entry(app_handle: AppHandle, id: i32) -> Result<bool, AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     sqlx::query("UPDATE clipboard_entries SET is_pinned = NOT is_pinned WHERE id = ?")
         .bind(id)
         .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let row = sqlx::query("SELECT is_pinned FROM clipboard_entries WHERE id = ?")
         .bind(id)
         .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     Ok(row.get::<bool, _>("is_pinned"))
 }
@@ -162,22 +154,21 @@ pub async fn rename_clipboard_entry(
     app_handle: AppHandle,
     id: i32,
     name: String,
-) -> Result<(), String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+) -> Result<(), AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     sqlx::query("UPDATE clipboard_entries SET custom_name = ? WHERE id = ?")
         .bind(&name)
         .bind(id)
         .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(())
 }
 
 /// Paste an image entry by writing the saved PNG to the clipboard, then pasting.
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     let paster = app_handle.state::<PasterPort>().inner().clone();
 
@@ -185,15 +176,15 @@ pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Res
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // Hide and paste
-    app_handle.hide().map_err(|e| e.to_string())?;
+    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
     paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-    paster.paste()
+    paster.paste().map_err(AppError::from)
 }
 
 /// Copy an image entry to the clipboard without pasting
 #[tauri::command]
 #[specta::specta]
-pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::ImageFile(image_path))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
@@ -202,7 +193,7 @@ pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(),
 
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     let paster = app_handle.state::<PasterPort>().inner().clone();
 
@@ -211,18 +202,18 @@ pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Resul
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // 2. Hide the app (returns focus to the previous app)
-    app_handle.hide().map_err(|e| e.to_string())?;
+    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
 
     // 3. Wait for the focus switch to complete by reading the active app
     paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
 
     // 4. Synthesize the paste keystroke
-    paster.paste()
+    paster.paste().map_err(AppError::from)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
@@ -231,26 +222,26 @@ pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), S
 
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     let paster = app_handle.state::<PasterPort>().inner().clone();
 
     clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    app_handle.hide().map_err(|e| e.to_string())?;
+    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
 
     // Wait for frontmost app switch
     paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
 
-    paster.paste()
+    paster.paste().map_err(AppError::from)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
+pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), AppError> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
-        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+        .map_err(|e| AppError::Other { message: format!("Failed to parse file paths: {}", e) })?;
 
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     let paster = app_handle.state::<PasterPort>().inner().clone();
@@ -259,16 +250,16 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // Hide the app and paste
-    app_handle.hide().map_err(|e| e.to_string())?;
+    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
     paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-    paster.paste()
+    paster.paste().map_err(AppError::from)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
+pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result<(), AppError> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
-        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+        .map_err(|e| AppError::Other { message: format!("Failed to parse file paths: {}", e) })?;
 
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::Files(file_paths))?;
@@ -283,8 +274,8 @@ pub async fn update_entry_content(
     app_handle: AppHandle,
     id: i32,
     content: String,
-) -> Result<(), String> {
-    let pool = get_pool(&app_handle).await.map_err(String::from)?;
+) -> Result<(), AppError> {
+    let pool = get_pool(&app_handle).await?;
 
     // Generate a preview (first 200 chars, single line)
     let preview = content
@@ -310,15 +301,14 @@ pub async fn update_entry_content(
         .bind(byte_size)
         .bind(id)
         .execute(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(())
 }
 
 /// Append text to the current clipboard content
 #[tauri::command]
 #[specta::specta]
-pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     // Read current clipboard content (cross-platform via the clipboard plugin)
     let current = app_handle
         .clipboard()
@@ -345,7 +335,7 @@ pub async fn save_entry_as_file(
     app_handle: AppHandle,
     content: String,
     default_name: String,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
 
     #[cfg(target_os = "macos")]
     {
@@ -358,7 +348,7 @@ pub async fn save_entry_as_file(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (&app_handle, &content, &default_name);
-        Err("Save dialog not supported on this platform".to_string())
+        Err(AppError::Other { message: "Save dialog not supported on this platform".to_string() })
     }
 }
 
@@ -367,37 +357,37 @@ pub async fn save_entry_as_file(
 /// simulates Cmd+V, then re-focuses Magpie.
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), String> {
+pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    paste_to_previous_app_keeping_window(&app_handle).await
+    paste_to_previous_app_keeping_window(&app_handle).await.map_err(AppError::from)
 }
 
 /// Paste an image entry while keeping the Magpie window visible.
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), String> {
+pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::ImageFile(image_path))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    paste_to_previous_app_keeping_window(&app_handle).await
+    paste_to_previous_app_keeping_window(&app_handle).await.map_err(AppError::from)
 }
 
 /// Paste file entries while keeping the Magpie window visible.
 #[tauri::command]
 #[specta::specta]
-pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: String) -> Result<(), String> {
+pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: String) -> Result<(), AppError> {
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
-        .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+        .map_err(|e| AppError::Other { message: format!("Failed to parse file paths: {}", e) })?;
 
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
     clipboard.write(&WritePayload::Files(file_paths))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    paste_to_previous_app_keeping_window(&app_handle).await
+    paste_to_previous_app_keeping_window(&app_handle).await.map_err(AppError::from)
 }
 
 /// Shared tail of the paste-and-keep-window commands. The content must already

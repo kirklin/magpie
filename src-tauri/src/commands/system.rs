@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::State;
 
+use crate::error::AppError;
+
 /// In-memory cache for app icons (bundle_id -> base64 PNG)
 pub struct AppIconCache(pub Mutex<HashMap<String, String>>);
 
@@ -17,10 +19,10 @@ impl Default for AppIconCache {
 pub async fn get_app_icon(
     bundle_id: String,
     cache: State<'_, AppIconCache>,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     // Check cache first
     {
-        let c = cache.0.lock().map_err(|e| e.to_string())?;
+        let c = cache.0.lock().map_err(|e| AppError::Other { message: e.to_string() })?;
         if let Some(cached) = c.get(&bundle_id) {
             return Ok(cached.clone());
         }
@@ -32,7 +34,7 @@ pub async fn get_app_icon(
     // Store in cache (bounded to avoid unbounded growth over a long session).
     {
         const MAX_CACHED_ICONS: usize = 256;
-        let mut c = cache.0.lock().map_err(|e| e.to_string())?;
+        let mut c = cache.0.lock().map_err(|e| AppError::Other { message: e.to_string() })?;
         if c.len() >= MAX_CACHED_ICONS && !c.contains_key(&bundle_id) {
             c.clear();
         }
@@ -46,9 +48,9 @@ pub async fn get_app_icon(
 #[specta::specta]
 pub async fn get_file_icon(
     file_path: String,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     // We don't cache file icons for now as they might change or be too numerous
-    fetch_file_icon_macos(&file_path)
+    fetch_file_icon_macos(&file_path).map_err(AppError::from)
 }
 
 #[cfg(target_os = "macos")]

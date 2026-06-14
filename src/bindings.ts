@@ -4,46 +4,46 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	getClipboardEntries: (query: ClipboardQuery) => typedError<ClipboardEntry[], string>(__TAURI_INVOKE("get_clipboard_entries", { query })),
-	deleteClipboardEntry: (id: number) => typedError<null, string>(__TAURI_INVOKE("delete_clipboard_entry", { id })),
-	clearClipboardHistory: () => typedError<null, string>(__TAURI_INVOKE("clear_clipboard_history")),
-	togglePinEntry: (id: number) => typedError<boolean, string>(__TAURI_INVOKE("toggle_pin_entry", { id })),
-	renameClipboardEntry: (id: number, name: string) => typedError<null, string>(__TAURI_INVOKE("rename_clipboard_entry", { id, name })),
-	pasteClipboardEntry: (text: string) => typedError<null, string>(__TAURI_INVOKE("paste_clipboard_entry", { text })),
+	getClipboardEntries: (query: ClipboardQuery) => typedError<ClipboardEntry[], AppError>(__TAURI_INVOKE("get_clipboard_entries", { query })),
+	deleteClipboardEntry: (id: number) => typedError<null, AppError>(__TAURI_INVOKE("delete_clipboard_entry", { id })),
+	clearClipboardHistory: () => typedError<null, AppError>(__TAURI_INVOKE("clear_clipboard_history")),
+	togglePinEntry: (id: number) => typedError<boolean, AppError>(__TAURI_INVOKE("toggle_pin_entry", { id })),
+	renameClipboardEntry: (id: number, name: string) => typedError<null, AppError>(__TAURI_INVOKE("rename_clipboard_entry", { id, name })),
+	pasteClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_clipboard_entry", { text })),
 	/**  Paste an image entry by writing the saved PNG to the clipboard, then pasting. */
-	pasteImageEntry: (imagePath: string) => typedError<null, string>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
+	pasteImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
 	/**  Copy an image entry to the clipboard without pasting */
-	copyImageEntry: (imagePath: string) => typedError<null, string>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
-	copyClipboardEntry: (text: string) => typedError<null, string>(__TAURI_INVOKE("copy_clipboard_entry", { text })),
-	pasteAsPlainText: (text: string) => typedError<null, string>(__TAURI_INVOKE("paste_as_plain_text", { text })),
-	pasteFileEntry: (filePathsJson: string) => typedError<null, string>(__TAURI_INVOKE("paste_file_entry", { filePathsJson })),
-	copyFileEntry: (filePathsJson: string) => typedError<null, string>(__TAURI_INVOKE("copy_file_entry", { filePathsJson })),
+	copyImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
+	copyClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_clipboard_entry", { text })),
+	pasteAsPlainText: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_as_plain_text", { text })),
+	pasteFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_entry", { filePathsJson })),
+	copyFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_file_entry", { filePathsJson })),
 	/**  Update the text content of a clipboard entry (Edit Content action) */
-	updateEntryContent: (id: number, content: string) => typedError<null, string>(__TAURI_INVOKE("update_entry_content", { id, content })),
+	updateEntryContent: (id: number, content: string) => typedError<null, AppError>(__TAURI_INVOKE("update_entry_content", { id, content })),
 	/**  Append text to the current clipboard content */
-	appendToClipboard: (text: string) => typedError<null, string>(__TAURI_INVOKE("append_to_clipboard", { text })),
+	appendToClipboard: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("append_to_clipboard", { text })),
 	/**  Save clipboard entry content to a file using a native save dialog */
-	saveEntryAsFile: (content: string, defaultName: string) => typedError<boolean, string>(__TAURI_INVOKE("save_entry_as_file", { content, defaultName })),
+	saveEntryAsFile: (content: string, defaultName: string) => typedError<boolean, AppError>(__TAURI_INVOKE("save_entry_as_file", { content, defaultName })),
 	/**
 	 *  Paste content to the target app while keeping the Magpie window visible.
 	 *  Activates the target app (window stays on screen due to always_on_top),
 	 *  simulates Cmd+V, then re-focuses Magpie.
 	 */
-	pasteAndKeepWindow: (text: string) => typedError<null, string>(__TAURI_INVOKE("paste_and_keep_window", { text })),
+	pasteAndKeepWindow: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_and_keep_window", { text })),
 	/**  Paste an image entry while keeping the Magpie window visible. */
-	pasteImageAndKeepWindow: (imagePath: string) => typedError<null, string>(__TAURI_INVOKE("paste_image_and_keep_window", { imagePath })),
+	pasteImageAndKeepWindow: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_and_keep_window", { imagePath })),
 	/**  Paste file entries while keeping the Magpie window visible. */
-	pasteFileAndKeepWindow: (filePathsJson: string) => typedError<null, string>(__TAURI_INVOKE("paste_file_and_keep_window", { filePathsJson })),
+	pasteFileAndKeepWindow: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_and_keep_window", { filePathsJson })),
 	/**
 	 *  Export clipboard history to a JSON file via native save dialog.
 	 *  Returns the number of entries exported, or 0 if the user cancelled.
 	 */
-	exportClipboardHistory: () => typedError<number, string>(__TAURI_INVOKE("export_clipboard_history")),
+	exportClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("export_clipboard_history")),
 	/**
 	 *  Import clipboard history from a JSON file via native open dialog.
 	 *  Returns the number of entries imported (skipping duplicates).
 	 */
-	importClipboardHistory: () => typedError<number, string>(__TAURI_INVOKE("import_clipboard_history")),
+	importClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("import_clipboard_history")),
 	getDefaultSettings: () => __TAURI_INVOKE<AppSettings>("get_default_settings"),
 	/**
 	 *  Re-register the global shortcut at runtime.
@@ -53,17 +53,33 @@ export const commands = {
 	 *  valid-but-unregisterable combination (e.g. already held by another app)
 	 *  fails to bind, we fall back to the default shortcut and return an error.
 	 */
-	updateGlobalShortcut: (shortcut: string) => typedError<null, string>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
+	updateGlobalShortcut: (shortcut: string) => typedError<null, AppError>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
 	/**  Show or hide the menu bar tray icon at runtime. */
-	setTrayVisible: (visible: boolean) => typedError<null, string>(__TAURI_INVOKE("set_tray_visible", { visible })),
+	setTrayVisible: (visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_tray_visible", { visible })),
 	/**  Get the app icon as a base64-encoded PNG string for a given bundle ID */
-	getAppIcon: (bundleId: string) => typedError<string, string>(__TAURI_INVOKE("get_app_icon", { bundleId })),
-	getFileIcon: (filePath: string) => typedError<string, string>(__TAURI_INVOKE("get_file_icon", { filePath })),
+	getAppIcon: (bundleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { bundleId })),
+	getFileIcon: (filePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_file_icon", { filePath })),
 	/**  Hide the main window */
 	hideWindow: () => __TAURI_INVOKE<void>("hide_window"),
 };
 
 /* Types */
+/**
+ *  Application-level error for the Rust side, surfaced to the frontend.
+ * 
+ *  Serializable + `specta::Type` and internally tagged on `kind`, so commands
+ *  can return `Result<T, AppError>` and the generated TypeScript bindings get a
+ *  typed discriminated union:
+ *  `{ kind: "DbUnavailable" } | { kind: "Sql"; message: string } | …`.
+ * 
+ *  `Sql`/`Io` carry a `message: String` rather than the underlying
+ *  `sqlx::Error` / `std::io::Error` (which are not serializable); the manual
+ *  `From` impls below stringify them. `Display` still emits the same stable
+ *  prefixes (`db_unavailable:` / `sql:` / …), so any remaining
+ *  `Result<T, String>` command keeps its old wire string.
+ */
+export type AppError = { kind: "DbUnavailable" } | { kind: "Sql"; message: string } | { kind: "Io"; message: string } | { kind: "Validation"; message: string } | { kind: "Other"; message: string };
+
 /**  Settings */
 export type AppSettings = {
 	history_retention_days: number,
