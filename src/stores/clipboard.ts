@@ -14,6 +14,11 @@ export type { ClipboardEntry, ClipboardQuery };
 /** Number of entries fetched per page. The list pages in more on scroll. */
 export const PAGE_SIZE = 100;
 
+// Monotonic id for the latest first-page fetch. Tauri's invoke can't be aborted,
+// so instead of cancelling an in-flight query we tag each one and drop any
+// response whose id is no longer current (out-of-order / superseded results).
+let fetchSeq = 0;
+
 interface ClipboardStore {
   entries: ClipboardEntry[];
   selectedId: number | null;
@@ -79,6 +84,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   // Fetch the first page (resets pagination). Called on mount, search, filter.
   fetchEntries: async () => {
     const { searchQuery, activeFilter } = get();
+    const seq = ++fetchSeq;
     set({ isLoading: true });
     try {
       const query: ClipboardQuery = {
@@ -89,8 +95,12 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         offset: 0,
       };
       const entries = await invoke<ClipboardEntry[]>("get_clipboard_entries", { query });
+      // Drop this result if a newer fetch has started since (e.g. the user kept
+      // typing) so a slow earlier query can't overwrite later results.
+      if (seq !== fetchSeq) return;
       set({ entries, isLoading: false, hasMore: entries.length === PAGE_SIZE });
     } catch (e) {
+      if (seq !== fetchSeq) return;
       console.error("Failed to fetch clipboard entries:", e);
       set({ isLoading: false });
       useToastStore.getState().add(parseAppError(e).message, "error");
@@ -102,6 +112,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   loadMore: async () => {
     const { searchQuery, activeFilter, entries, hasMore, isLoadingMore, isLoading } = get();
     if (!hasMore || isLoadingMore || isLoading) return;
+    // Tie this page to the current first-page fetch; if a new search/filter
+    // resets the list mid-flight, discard the now-stale page.
+    const seq = fetchSeq;
     set({ isLoadingMore: true });
     try {
       const query: ClipboardQuery = {
@@ -112,6 +125,10 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         offset: entries.length,
       };
       const page = await invoke<ClipboardEntry[]>("get_clipboard_entries", { query });
+      if (seq !== fetchSeq) {
+        set({ isLoadingMore: false });
+        return;
+      }
       set((state) => {
         // Dedup by id in case the underlying order shifted between pages.
         const seen = new Set(state.entries.map(e => e.id));
@@ -123,6 +140,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         };
       });
     } catch (e) {
+      if (seq !== fetchSeq) return;
       console.error("Failed to load more clipboard entries:", e);
       set({ isLoadingMore: false });
     }

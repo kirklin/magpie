@@ -94,7 +94,10 @@ export function ClipboardHistory() {
     return out;
   }, [groupedEntries]);
 
-  // Fetch entries on mount and when search changes (but not during IME composition)
+  // Fetch on mount and when the search changes (skipping IME composition).
+  // No debounce: the query is a local SQLite LIKE (sub-millisecond), so
+  // search-as-you-type stays instant. Overlapping queries are made safe by
+  // fetchSeq in the store, which drops any out-of-order / stale result.
   useEffect(() => {
     if (!isComposingRef.current) {
       fetchEntries();
