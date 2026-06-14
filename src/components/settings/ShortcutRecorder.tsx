@@ -11,30 +11,87 @@ interface ShortcutRecorderProps {
 
 /** Map e.code to a Tauri-compatible key name */
 const CODE_TO_KEY: Record<string, string> = {
-  KeyA: "A", KeyB: "B", KeyC: "C", KeyD: "D", KeyE: "E",
-  KeyF: "F", KeyG: "G", KeyH: "H", KeyI: "I", KeyJ: "J",
-  KeyK: "K", KeyL: "L", KeyM: "M", KeyN: "N", KeyO: "O",
-  KeyP: "P", KeyQ: "Q", KeyR: "R", KeyS: "S", KeyT: "T",
-  KeyU: "U", KeyV: "V", KeyW: "W", KeyX: "X", KeyY: "Y",
+  KeyA: "A",
+  KeyB: "B",
+  KeyC: "C",
+  KeyD: "D",
+  KeyE: "E",
+  KeyF: "F",
+  KeyG: "G",
+  KeyH: "H",
+  KeyI: "I",
+  KeyJ: "J",
+  KeyK: "K",
+  KeyL: "L",
+  KeyM: "M",
+  KeyN: "N",
+  KeyO: "O",
+  KeyP: "P",
+  KeyQ: "Q",
+  KeyR: "R",
+  KeyS: "S",
+  KeyT: "T",
+  KeyU: "U",
+  KeyV: "V",
+  KeyW: "W",
+  KeyX: "X",
+  KeyY: "Y",
   KeyZ: "Z",
-  Digit0: "0", Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4",
-  Digit5: "5", Digit6: "6", Digit7: "7", Digit8: "8", Digit9: "9",
-  F1: "F1", F2: "F2", F3: "F3", F4: "F4", F5: "F5", F6: "F6",
-  F7: "F7", F8: "F8", F9: "F9", F10: "F10", F11: "F11", F12: "F12",
-  Space: "Space", Backspace: "Backspace", Delete: "Delete",
-  Enter: "Enter", Tab: "Tab",
-  ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right",
-  Minus: "-", Equal: "=",
-  BracketLeft: "[", BracketRight: "]",
-  Backslash: "\\", Semicolon: ";", Quote: "'",
-  Comma: ",", Period: ".", Slash: "/",
+  Digit0: "0",
+  Digit1: "1",
+  Digit2: "2",
+  Digit3: "3",
+  Digit4: "4",
+  Digit5: "5",
+  Digit6: "6",
+  Digit7: "7",
+  Digit8: "8",
+  Digit9: "9",
+  F1: "F1",
+  F2: "F2",
+  F3: "F3",
+  F4: "F4",
+  F5: "F5",
+  F6: "F6",
+  F7: "F7",
+  F8: "F8",
+  F9: "F9",
+  F10: "F10",
+  F11: "F11",
+  F12: "F12",
+  Space: "Space",
+  Backspace: "Backspace",
+  Delete: "Delete",
+  Enter: "Enter",
+  Tab: "Tab",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  Minus: "-",
+  Equal: "=",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
   Backquote: "`",
 };
 
 const KEY_DISPLAY: Record<string, string> = {
-  Up: "↑", Down: "↓", Left: "←", Right: "→",
-  Space: "Space", Backspace: "⌫", Delete: "⌦",
-  Enter: "↩", Tab: "⇥", Escape: "⎋",
+  Up: "↑",
+  Down: "↓",
+  Left: "←",
+  Right: "→",
+  Space: "Space",
+  Backspace: "⌫",
+  Delete: "⌦",
+  Enter: "↩",
+  Tab: "⇥",
+  Escape: "⎋",
 };
 
 function formatShortcutDisplay(shortcut: string): string[] {
@@ -53,18 +110,37 @@ function formatShortcutDisplay(shortcut: string): string[] {
 }
 
 function keyEventToShortcut(e: KeyboardEvent): string | null {
-  if (!e.metaKey && !e.ctrlKey && !e.altKey) return null;
+  if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+    return null;
+  }
   const modifierCodes = new Set([
-    "MetaLeft", "MetaRight", "ControlLeft", "ControlRight",
-    "AltLeft", "AltRight", "ShiftLeft", "ShiftRight", "CapsLock",
+    "MetaLeft",
+    "MetaRight",
+    "ControlLeft",
+    "ControlRight",
+    "AltLeft",
+    "AltRight",
+    "ShiftLeft",
+    "ShiftRight",
+    "CapsLock",
   ]);
-  if (modifierCodes.has(e.code)) return null;
+  if (modifierCodes.has(e.code)) {
+    return null;
+  }
   const parts: string[] = [];
-  if (e.metaKey || e.ctrlKey) parts.push("CmdOrCtrl");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
+  if (e.metaKey || e.ctrlKey) {
+    parts.push("CmdOrCtrl");
+  }
+  if (e.altKey) {
+    parts.push("Alt");
+  }
+  if (e.shiftKey) {
+    parts.push("Shift");
+  }
   const key = CODE_TO_KEY[e.code];
-  if (!key) return null;
+  if (!key) {
+    return null;
+  }
   parts.push(key);
   return parts.join("+");
 }
@@ -98,8 +174,12 @@ function RecordingPopover({
     let left = anchorRect.right - popoverW;
 
     // Clamp to viewport
-    if (top < 4) top = anchorRect.bottom + gap;
-    if (left < 4) left = 4;
+    if (top < 4) {
+      top = anchorRect.bottom + gap;
+    }
+    if (left < 4) {
+      left = 4;
+    }
 
     setPos({ top, left });
   }, [anchorRect]);
@@ -165,12 +245,18 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
   };
 
   const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
-    if (!isRecording) return;
+    if (!isRecording) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
-    if (e.key === "Escape") { closeRecording(); return; }
+    if (e.key === "Escape") {
+      closeRecording(); return;
+    }
     const shortcut = keyEventToShortcut(e);
-    if (!shortcut) return;
+    if (!shortcut) {
+      return;
+    }
     closeRecording();
     try {
       await onChange(shortcut);
@@ -179,7 +265,9 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
     } catch (err) {
       setIsError(true);
       setErrorMsg(String(err));
-      setTimeout(() => { setIsError(false); setErrorMsg(""); }, 3000);
+      setTimeout(() => {
+        setIsError(false); setErrorMsg("");
+      }, 3000);
     }
   }, [isRecording, onChange]);
 
@@ -192,7 +280,9 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
 
   // Click outside to cancel
   useEffect(() => {
-    if (!isRecording) return;
+    if (!isRecording) {
+      return;
+    }
     const handleClick = (e: MouseEvent) => {
       // Close if clicking outside the button (popover is in portal)
       if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {

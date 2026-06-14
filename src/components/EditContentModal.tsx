@@ -39,7 +39,9 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
 
   // Handle keyboard shortcuts within the modal
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -55,7 +57,9 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose, handleSave]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   const hasChanged = content !== initialContent;
 
@@ -101,7 +105,7 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
             ref={textareaRef}
             className="w-full h-full bg-transparent border-none outline-none text-text-primary text-[13px] leading-relaxed font-mono resize-none p-2"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={e => setContent(e.target.value)}
             spellCheck={false}
           />
         </div>

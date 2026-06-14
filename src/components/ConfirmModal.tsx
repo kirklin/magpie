@@ -34,7 +34,9 @@ export function ConfirmModal({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (!isOpen) return;
+      if (!isOpen) {
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
@@ -51,7 +53,9 @@ export function ConfirmModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <>

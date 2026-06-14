@@ -1,3 +1,4 @@
+import type { Locale } from "../i18n";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -8,7 +9,7 @@ import { SettingToggle } from "../components/settings/SettingToggle";
 import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { ThemePicker } from "../components/settings/ThemePicker";
 import { useToastStore } from "../components/Toast";
-import { type Locale, useT } from "../i18n";
+import { useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";

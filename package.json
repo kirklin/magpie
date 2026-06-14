@@ -2,9 +2,9 @@
   "name": "magpie",
   "type": "module",
   "version": "0.6.0",
-  "license": "GPL-3.0-only",
   "private": true,
   "packageManager": "pnpm@10.15.0",
+  "license": "GPL-3.0-only",
   "scripts": {
     "dev": "tauri dev",
     "dev:vite": "vite",

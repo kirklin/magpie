@@ -1,6 +1,7 @@
+import type { Locale } from "../i18n";
 import { Code2, File, FileText, Image as ImageIcon, Link2, Mail, Palette, Type } from "lucide-react";
 import React from "react";
-import { type Locale, t } from "../i18n";
+import { t } from "../i18n";
 
 export function getTypeLabel(type: string, locale: Locale = "zh"): string {
   switch (type) {

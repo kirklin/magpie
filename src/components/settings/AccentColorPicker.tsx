@@ -1,6 +1,8 @@
+import type { StringKey } from "../../i18n";
+import type { AccentColorId } from "../../stores/settings";
 import { Check } from "lucide-react";
-import { type StringKey, useT } from "../../i18n";
-import { ACCENT_PRESETS, type AccentColorId } from "../../stores/settings";
+import { useT } from "../../i18n";
+import { ACCENT_PRESETS } from "../../stores/settings";
 
 interface AccentColorPickerProps {
   value: AccentColorId;
@@ -13,7 +15,7 @@ export function AccentColorPicker({ value, onChange }: AccentColorPickerProps) {
     <div className="flex items-center justify-between px-4 py-3 min-h-[44px]">
       <span className="text-[13px] text-text-primary">{t("settings.accent_label")}</span>
       <div className="flex items-center gap-2">
-        {ACCENT_PRESETS.map(preset => {
+        {ACCENT_PRESETS.map((preset) => {
           const isActive = value === preset.id;
           return (
             <button

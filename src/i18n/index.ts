@@ -1,6 +1,7 @@
+import type { StringKey } from "./strings";
 import { useMemo } from "react";
 import { useSettingsStore } from "../stores/settings";
-import { STRINGS, type StringKey } from "./strings";
+import { STRINGS } from "./strings";
 
 export type Locale = "zh" | "en";
 

@@ -25,6 +25,8 @@ export function parseAppError(error: unknown): { kind: string; message: string }
       = "message" in e && typeof e.message === "string" ? e.message : kindFallback(e.kind);
     return { kind: e.kind, message };
   }
-  if (error instanceof Error) return { kind: "Other", message: error.message };
+  if (error instanceof Error) {
+    return { kind: "Other", message: error.message };
+  }
   return { kind: "Other", message: typeof error === "string" ? error : String(error) };
 }

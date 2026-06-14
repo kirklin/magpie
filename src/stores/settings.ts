@@ -5,8 +5,10 @@ import { create } from "zustand";
 
 export type ThemeMode = "system" | "dark" | "light";
 
-/** Predefined accent color presets (oklch hue values). Display names are
- *  resolved per-locale via the i18n `color.*` keys (see AccentColorPicker). */
+/**
+ * Predefined accent color presets (oklch hue values). Display names are
+ *  resolved per-locale via the i18n `color.*` keys (see AccentColorPicker).
+ */
 export const ACCENT_PRESETS = [
   { id: "blue", hue: 260, swatch: "oklch(0.65 0.18 260)" },
   { id: "purple", hue: 290, swatch: "oklch(0.65 0.18 290)" },

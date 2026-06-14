@@ -17,7 +17,7 @@ interface ToastStore {
 
 let nextId = 0;
 
-export const useToastStore = create<ToastStore>((set) => ({
+export const useToastStore = create<ToastStore>(set => ({
   toasts: [],
   add: (message, type = "success") => {
     const id = nextId++;
@@ -27,7 +27,7 @@ export const useToastStore = create<ToastStore>((set) => ({
       set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
     }, 2000);
   },
-  remove: (id) => set(state => ({ toasts: state.toasts.filter(t => t.id !== id) })),
+  remove: id => set(state => ({ toasts: state.toasts.filter(t => t.id !== id) })),
 }));
 
 // --- Toast Container Component ---
@@ -35,7 +35,9 @@ export const useToastStore = create<ToastStore>((set) => ({
 export function ToastContainer() {
   const { toasts } = useToastStore();
 
-  if (toasts.length === 0) return null;
+  if (toasts.length === 0) {
+    return null;
+  }
 
   return (
     <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-1.5 pointer-events-none">
@@ -53,7 +55,7 @@ function ToastItem({ toast }: { toast: Toast }) {
     // Trigger enter animation
     requestAnimationFrame(() => setVisible(true));
     // Trigger exit animation before removal
-    const timer = setTimeout(() => setVisible(false), 1700);
+    const timer = setTimeout(setVisible, 1700, false);
     return () => clearTimeout(timer);
   }, []);
 

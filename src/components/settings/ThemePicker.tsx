@@ -1,5 +1,6 @@
+import type { StringKey } from "../../i18n";
 import type { ThemeMode } from "../../stores/settings";
-import { type StringKey, useT } from "../../i18n";
+import { useT } from "../../i18n";
 
 interface ThemePickerProps {
   value: ThemeMode;

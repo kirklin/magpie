@@ -98,48 +98,48 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
             </div>
           )
         : isMultiFile
-            ? (
-                <span className={`w-6 h-6 flex items-center justify-center shrink-0 ${
-                  isSelected ? "text-text-primary" : "text-text-tertiary"
-                }`}
-                >
-                  <Files size={18} strokeWidth={2} />
-                </span>
-              )
-            : (isFile && fileImagePath && !thumbFailed)
-                ? (
-                    <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
-                      <img
-                        src={convertFileSrc(fileImagePath)}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        onError={() => setThumbFailed(true)}
-                      />
-                    </div>
-                  )
-            : (isFile && parsedPaths && parsedPaths.length === 1)
-                ? (
-                    <div className="shrink-0 flex items-center justify-center">
-                      <NativeFileIcon filePath={parsedPaths[0]} className="w-6 h-6" />
-                    </div>
-                  )
-                : isColor
+          ? (
+              <span className={`w-6 h-6 flex items-center justify-center shrink-0 ${
+                isSelected ? "text-text-primary" : "text-text-tertiary"
+              }`}
+              >
+                <Files size={18} strokeWidth={2} />
+              </span>
+            )
+          : (isFile && fileImagePath && !thumbFailed)
+              ? (
+                  <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
+                    <img
+                      src={convertFileSrc(fileImagePath)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => setThumbFailed(true)}
+                    />
+                  </div>
+                )
+              : (isFile && parsedPaths && parsedPaths.length === 1)
                   ? (
-                      <span className={`flex items-center justify-center shrink-0 w-6 h-6 ${
-                        isSelected ? "text-text-primary" : "text-text-tertiary"
-                      }`}
-                      >
-                        <div className="w-4 h-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: displayName }} />
-                      </span>
+                      <div className="shrink-0 flex items-center justify-center">
+                        <NativeFileIcon filePath={parsedPaths[0]} className="w-6 h-6" />
+                      </div>
                     )
-                  : (
-                      <span className={`flex items-center justify-center shrink-0 ${
-                        isSelected ? "text-text-primary" : "text-text-tertiary"
-                      }`}
-                      >
-                        {typeIcon}
-                      </span>
-                    )}
+                  : isColor
+                    ? (
+                        <span className={`flex items-center justify-center shrink-0 w-6 h-6 ${
+                          isSelected ? "text-text-primary" : "text-text-tertiary"
+                        }`}
+                        >
+                          <div className="w-4 h-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: displayName }} />
+                        </span>
+                      )
+                    : (
+                        <span className={`flex items-center justify-center shrink-0 ${
+                          isSelected ? "text-text-primary" : "text-text-tertiary"
+                        }`}
+                        >
+                          {typeIcon}
+                        </span>
+                      )}
 
       <div className="flex-1 min-w-0">
         <div className="text-[13px] leading-tight truncate" title={displayName}>{displayName}</div>

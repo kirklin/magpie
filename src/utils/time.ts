@@ -1,4 +1,5 @@
-import { type Locale, t } from "../i18n";
+import type { Locale } from "../i18n";
+import { t } from "../i18n";
 
 /** Format relative time in the given locale (defaults to zh). */
 export function formatRelativeTime(dateStr: string, locale: Locale = "zh"): string {

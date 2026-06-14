@@ -59,7 +59,7 @@
 html[data-theme="light"] {
   --color-bg-primary: oklch(0.97 0.005 260 / 0.92);
   --color-bg-secondary: oklch(0.94 0.005 260 / 0.95);
-  --color-bg-tertiary: oklch(0.90 0.005 260 / 0.8);
+  --color-bg-tertiary: oklch(0.9 0.005 260 / 0.8);
   --color-bg-hover: oklch(0 0 0 / 0.05);
   --color-bg-active: oklch(0 0 0 / 0.08);
 
@@ -204,19 +204,19 @@ html[data-theme="light"] {
   top: 0;
   bottom: 0;
   width: 80px;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    var(--color-bg-primary) 60%
-  );
+  background: linear-gradient(to right, transparent 0%, var(--color-bg-primary) 60%);
   pointer-events: none;
   z-index: 3;
   animation: qp-overlay-in 150ms ease forwards;
 }
 
 @keyframes qp-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Number badge with solid mask background */
@@ -257,6 +257,3 @@ html[data-theme="light"] .quick-paste-badge {
     0 0 0 0.5px oklch(0 0 0 / 0.08),
     inset 0 0.5px 0 oklch(1 0 0 / 0.5);
 }
-
-
-

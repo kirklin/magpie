@@ -1,13 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
-import { create } from "zustand";
-import { useToastStore } from "../components/Toast";
-import { parseAppError } from "../lib/error";
-
 // IPC types are generated from the Rust structs — see src/bindings.ts,
 // regenerated via `cargo test export_typescript_bindings`. Imported for local
 // use and re-exported so existing
 // `import { ClipboardEntry } from "../stores/clipboard"` keeps working.
 import type { ClipboardEntry, ClipboardQuery } from "../bindings";
+import { invoke } from "@tauri-apps/api/core";
+import { create } from "zustand";
+import { useToastStore } from "../components/Toast";
+
+import { parseAppError } from "../lib/error";
 
 export type { ClipboardEntry, ClipboardQuery };
 
@@ -97,10 +97,14 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       const entries = await invoke<ClipboardEntry[]>("get_clipboard_entries", { query });
       // Drop this result if a newer fetch has started since (e.g. the user kept
       // typing) so a slow earlier query can't overwrite later results.
-      if (seq !== fetchSeq) return;
+      if (seq !== fetchSeq) {
+        return;
+      }
       set({ entries, isLoading: false, hasMore: entries.length === PAGE_SIZE });
     } catch (e) {
-      if (seq !== fetchSeq) return;
+      if (seq !== fetchSeq) {
+        return;
+      }
       console.error("Failed to fetch clipboard entries:", e);
       set({ isLoading: false });
       useToastStore.getState().add(parseAppError(e).message, "error");
@@ -111,7 +115,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   // so the whole history is reachable rather than capped at the first page.
   loadMore: async () => {
     const { searchQuery, activeFilter, entries, hasMore, isLoadingMore, isLoading } = get();
-    if (!hasMore || isLoadingMore || isLoading) return;
+    if (!hasMore || isLoadingMore || isLoading) {
+      return;
+    }
     // Tie this page to the current first-page fetch; if a new search/filter
     // resets the list mid-flight, discard the now-stale page.
     const seq = fetchSeq;
@@ -140,7 +146,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         };
       });
     } catch (e) {
-      if (seq !== fetchSeq) return;
+      if (seq !== fetchSeq) {
+        return;
+      }
       console.error("Failed to load more clipboard entries:", e);
       set({ isLoadingMore: false });
     }
@@ -160,7 +168,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
           if (idx < newEntries.length) {
             newSelectedId = newEntries[idx]?.id ?? null;
           } else {
-            newSelectedId = newEntries[newEntries.length - 1]?.id ?? null;
+            newSelectedId = newEntries.at(-1)?.id ?? null;
           }
         }
 
@@ -175,13 +183,15 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   togglePin: async (id) => {
     try {
       const isPinned = await invoke<boolean>("toggle_pin_entry", { id });
-      set(state => {
+      set((state) => {
         const newEntries = state.entries.map(e =>
           e.id === id ? { ...e, is_pinned: isPinned } : e,
         );
         // Re-sort: pinned first, then by accessed_at descending
         newEntries.sort((a, b) => {
-          if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+          if (a.is_pinned !== b.is_pinned) {
+            return a.is_pinned ? -1 : 1;
+          }
           return (b.accessed_at ?? "").localeCompare(a.accessed_at ?? "");
         });
         return { entries: newEntries };
@@ -342,7 +352,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       }
       // Re-sort: pinned first, then by accessed_at descending
       newEntries.sort((a, b) => {
-        if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+        if (a.is_pinned !== b.is_pinned) {
+          return a.is_pinned ? -1 : 1;
+        }
         return (b.accessed_at ?? "").localeCompare(a.accessed_at ?? "");
       });
       return { entries: newEntries };

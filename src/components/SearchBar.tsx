@@ -1,6 +1,7 @@
+import type { StringKey } from "../i18n";
 import { Check, ChevronDown, Code, FileText, Image, Layers, Link, Mail, Palette, Search, Type } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { type StringKey, useT } from "../i18n";
+import { useT } from "../i18n";
 
 interface SearchBarProps {
   value: string;
@@ -45,7 +46,9 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
           if (focused) {
             requestAnimationFrame(() => inputRef.current?.focus());
           }
-        }).then(fn => { unlisten = fn; });
+        }).then((fn) => {
+          unlisten = fn;
+        });
       });
 
       return () => unlisten?.();
@@ -68,7 +71,9 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
 
     // Keyboard navigation for the dropdown
     const handleDropdownKeyDown = useCallback((e: KeyboardEvent) => {
-      if (!isDropdownOpen) return;
+      if (!isDropdownOpen) {
+        return;
+      }
 
       switch (e.key) {
         case "ArrowDown": {
@@ -174,7 +179,11 @@ export const SearchBar = forwardRef<SearchBarRef, SearchBarProps>(
                 {FILTER_OPTIONS.map((option, index) => (
                   <button
                     key={option.value || "all"}
-                    ref={el => { if (el) itemRefs.current.set(index, el); }}
+                    ref={(el) => {
+                      if (el) {
+                        itemRefs.current.set(index, el);
+                      }
+                    }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 text-[13px] font-medium rounded-lg transition-colors ${
                       index === highlightedIndex
                         ? "bg-bg-hover text-text-primary"

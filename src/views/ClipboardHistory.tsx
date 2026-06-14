@@ -1,11 +1,11 @@
-import type { ClipboardEntry } from "../stores/clipboard";
+import type { VirtuosoHandle } from "react-virtuoso";
 import type { SearchBarRef } from "../components/SearchBar";
+import type { ClipboardEntry } from "../stores/clipboard";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import { useCommandHold } from "../hooks/useCommandHold";
+import { Virtuoso } from "react-virtuoso";
 import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -14,6 +14,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
 import { ToastContainer, useToastStore } from "../components/Toast";
+import { useCommandHold } from "../hooks/useCommandHold";
 import { useLocale, useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
@@ -81,9 +82,9 @@ export function ClipboardHistory() {
   // Flatten the date groups into a single row list (header rows + item rows)
   // so the list can be virtualized. Item rows carry their flat index (position
   // among entries) for the ⌘-hold quick-paste badge.
-  type Row =
-    | { kind: "header"; label: string }
-    | { kind: "item"; entry: ClipboardEntry; index: number };
+  type Row
+    = | { kind: "header"; label: string }
+      | { kind: "item"; entry: ClipboardEntry; index: number };
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
     let itemIndex = 0;
@@ -126,7 +127,9 @@ export function ClipboardHistory() {
   // --- Action callbacks ---
 
   const handlePaste = useCallback(async () => {
-    if (!selectedEntry) return;
+    if (!selectedEntry) {
+      return;
+    }
     try {
       if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
         await pasteImageEntry(selectedEntry.image_path);
@@ -141,7 +144,9 @@ export function ClipboardHistory() {
   }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
 
   const handleCopy = useCallback(async () => {
-    if (!selectedEntry) return;
+    if (!selectedEntry) {
+      return;
+    }
     try {
       if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
         await copyImageEntry(selectedEntry.image_path);
@@ -159,7 +164,9 @@ export function ClipboardHistory() {
   }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast]);
 
   const handlePastePlainText = useCallback(async () => {
-    if (!selectedEntry?.text_content) return;
+    if (!selectedEntry?.text_content) {
+      return;
+    }
     try {
       await pasteAsPlainText(selectedEntry.text_content);
     } catch (e) {
@@ -168,7 +175,9 @@ export function ClipboardHistory() {
   }, [selectedEntry, pasteAsPlainText, toast]);
 
   const handlePasteKeepWindow = useCallback(async () => {
-    if (!selectedEntry) return;
+    if (!selectedEntry) {
+      return;
+    }
     try {
       if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
         await pasteImageAndKeepWindow(selectedEntry.image_path);
@@ -186,12 +195,16 @@ export function ClipboardHistory() {
   }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast]);
 
   const handleOpenUrl = useCallback(() => {
-    if (!selectedEntry?.text_content) return;
+    if (!selectedEntry?.text_content) {
+      return;
+    }
     window.open(selectedEntry.text_content, "_blank");
   }, [selectedEntry]);
 
   const handleAppendToClipboard = useCallback(async () => {
-    if (!selectedEntry?.text_content) return;
+    if (!selectedEntry?.text_content) {
+      return;
+    }
     try {
       await appendToClipboard(selectedEntry.text_content);
       toast.add(t("toast.appended"));
@@ -201,12 +214,16 @@ export function ClipboardHistory() {
   }, [selectedEntry, appendToClipboard, toast]);
 
   const handleEditContent = useCallback(() => {
-    if (!selectedEntry?.text_content) return;
+    if (!selectedEntry?.text_content) {
+      return;
+    }
     setIsEditModalOpen(true);
   }, [selectedEntry]);
 
   const handleSaveEditContent = useCallback(async (content: string) => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      return;
+    }
     try {
       await updateEntryContent(selectedId, content);
       toast.add(t("toast.content_updated"));
@@ -216,7 +233,9 @@ export function ClipboardHistory() {
   }, [selectedId, updateEntryContent, toast]);
 
   const handleTogglePin = useCallback(async () => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      return;
+    }
     const wasPinned = selectedEntry?.is_pinned;
     try {
       await togglePin(selectedId);
@@ -227,21 +246,27 @@ export function ClipboardHistory() {
   }, [selectedId, selectedEntry, togglePin, toast]);
 
   const handleSaveAsFile = useCallback(() => {
-    if (!selectedEntry) return;
+    if (!selectedEntry) {
+      return;
+    }
     const content = selectedEntry.text_content ?? "";
     // Derive a default filename from the content type
-    const ext = selectedEntry.content_type === "code" ? "txt"
-      : selectedEntry.content_type === "url" ? "url"
+    const ext = selectedEntry.content_type === "code"
+      ? "txt"
+      : selectedEntry.content_type === "url"
+        ? "url"
         : "txt";
     const preview = (selectedEntry.content_preview ?? "clipboard")
       .slice(0, 30)
-      .replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_");
+      .replace(/[^a-z0-9\u4E00-\u9FFF]/gi, "_");
     const defaultName = `${preview}.${ext}`;
     saveAsFile(content, defaultName);
   }, [selectedEntry, saveAsFile]);
 
   const handleDelete = useCallback(async () => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      return;
+    }
     try {
       await deleteEntry(selectedId);
       toast.add(t("toast.deleted"));
@@ -269,7 +294,9 @@ export function ClipboardHistory() {
   // Quick-paste helper: paste the Nth visible entry (0-indexed)
   const quickPasteByIndex = useCallback(async (index: number) => {
     const entry = entries[index];
-    if (!entry) return;
+    if (!entry) {
+      return;
+    }
     try {
       if (entry.content_type === "image" && entry.image_path) {
         await pasteImageEntry(entry.image_path);
@@ -286,7 +313,9 @@ export function ClipboardHistory() {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       // Don't handle when modals are open
-      if (isActionPanelOpen || isEditModalOpen || isConfirmClearOpen) return;
+      if (isActionPanelOpen || isEditModalOpen || isConfirmClearOpen) {
+        return;
+      }
 
       // ⌘ + number (1-9) → quick-paste the Nth item
       if (e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey) {
@@ -312,7 +341,9 @@ export function ClipboardHistory() {
           const nextIndex = Math.min(currentIndex + 1, entries.length - 1);
           setSelectedId(entries[nextIndex]?.id ?? null);
           // Page in more when navigating near the end of the loaded set.
-          if (nextIndex >= entries.length - 5) loadMore();
+          if (nextIndex >= entries.length - 5) {
+            loadMore();
+          }
           break;
         }
         case "ArrowUp": {
@@ -415,11 +446,27 @@ export function ClipboardHistory() {
       }
     },
     [
-      entries, selectedId, selectedEntry, isActionPanelOpen, isEditModalOpen, isConfirmClearOpen,
-      setSelectedId, handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
-      handleDelete, handleTogglePin, handleEditContent, handleOpenUrl,
-      handleAppendToClipboard, handleSaveAsFile, handleClearHistory, navigateTo,
-      quickPasteByIndex, loadMore,
+      entries,
+      selectedId,
+      selectedEntry,
+      isActionPanelOpen,
+      isEditModalOpen,
+      isConfirmClearOpen,
+      setSelectedId,
+      handlePaste,
+      handleCopy,
+      handlePastePlainText,
+      handlePasteKeepWindow,
+      handleDelete,
+      handleTogglePin,
+      handleEditContent,
+      handleOpenUrl,
+      handleAppendToClipboard,
+      handleSaveAsFile,
+      handleClearHistory,
+      navigateTo,
+      quickPasteByIndex,
+      loadMore,
     ],
   );
 
@@ -448,9 +495,13 @@ export function ClipboardHistory() {
   // `start`/`end` so it lands fully in view. Depends only on selectedId so
   // appending more pages doesn't yank the scroll.
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      return;
+    }
     const rowIndex = rows.findIndex(r => r.kind === "item" && r.entry.id === selectedId);
-    if (rowIndex < 0) return;
+    if (rowIndex < 0) {
+      return;
+    }
     const { startIndex, endIndex } = visibleRange.current;
     // Small margin so the selected row lands fully in view at the edge without
     // being cut, but not so large that a whole extra row shows past it (which
@@ -467,11 +518,13 @@ export function ClipboardHistory() {
   // Build grouped actions for the action panel
   const actionGroups = useMemo(() => buildClipboardActionGroups({
     hasEntry: !!selectedEntry,
-    entry: selectedEntry ? {
-      content_type: selectedEntry.content_type,
-      text_content: selectedEntry.text_content,
-      is_pinned: selectedEntry.is_pinned,
-    } : null,
+    entry: selectedEntry
+      ? {
+          content_type: selectedEntry.content_type,
+          text_content: selectedEntry.text_content,
+          is_pinned: selectedEntry.is_pinned,
+        }
+      : null,
     activeApp,
     t,
     onPaste: handlePaste,
@@ -486,10 +539,20 @@ export function ClipboardHistory() {
     onDelete: handleDelete,
     onClearHistory: handleClearHistory,
   }), [
-    selectedEntry, activeApp, t,
-    handlePaste, handleCopy, handlePastePlainText, handlePasteKeepWindow,
-    handleOpenUrl, handleAppendToClipboard, handleEditContent,
-    handleTogglePin, handleSaveAsFile, handleDelete, handleClearHistory,
+    selectedEntry,
+    activeApp,
+    t,
+    handlePaste,
+    handleCopy,
+    handlePastePlainText,
+    handlePasteKeepWindow,
+    handleOpenUrl,
+    handleAppendToClipboard,
+    handleEditContent,
+    handleTogglePin,
+    handleSaveAsFile,
+    handleDelete,
+    handleClearHistory,
   ]);
 
   return (

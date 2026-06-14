@@ -1,3 +1,4 @@
+import type { StringKey } from "../i18n";
 import {
   ClipboardPaste,
   Copy,
@@ -11,8 +12,10 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { type StringKey, useT } from "../i18n";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import { useT } from "../i18n";
+
+// --- ActionButton Component ---
 
 // --- Types ---
 
@@ -172,7 +175,9 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                         onClose();
                       }}
                       ref={(el) => {
-                        if (el) itemRefs.current.set(index, el);
+                        if (el) {
+                          itemRefs.current.set(index, el);
+                        }
                       }}
                     />
                   ))
@@ -183,7 +188,9 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                     const groupActions = group.actions.filter(a =>
                       a.label.toLowerCase().includes(search.toLowerCase()),
                     );
-                    if (groupActions.length === 0) return null;
+                    if (groupActions.length === 0) {
+                      return null;
+                    }
 
                     return (
                       <div key={group.label ?? groupIdx}>
@@ -204,7 +211,9 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                                 onClose();
                               }}
                               ref={(el) => {
-                                if (el) itemRefs.current.set(currentIndex, el);
+                                if (el) {
+                                  itemRefs.current.set(currentIndex, el);
+                                }
                               }}
                             />
                           );
@@ -218,10 +227,6 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
     </>
   );
 }
-
-// --- ActionButton Component ---
-
-import { forwardRef } from "react";
 
 const ActionButton = forwardRef<
   HTMLButtonElement,

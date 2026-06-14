@@ -4,80 +4,80 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	getClipboardEntries: (query: ClipboardQuery) => typedError<ClipboardEntry[], AppError>(__TAURI_INVOKE("get_clipboard_entries", { query })),
-	deleteClipboardEntry: (id: number) => typedError<null, AppError>(__TAURI_INVOKE("delete_clipboard_entry", { id })),
-	clearClipboardHistory: () => typedError<null, AppError>(__TAURI_INVOKE("clear_clipboard_history")),
-	togglePinEntry: (id: number) => typedError<boolean, AppError>(__TAURI_INVOKE("toggle_pin_entry", { id })),
-	renameClipboardEntry: (id: number, name: string) => typedError<null, AppError>(__TAURI_INVOKE("rename_clipboard_entry", { id, name })),
-	pasteClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_clipboard_entry", { text })),
-	/**  Paste an image entry by writing the saved PNG to the clipboard, then pasting. */
-	pasteImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
-	/**  Copy an image entry to the clipboard without pasting */
-	copyImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
-	copyClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_clipboard_entry", { text })),
-	pasteAsPlainText: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_as_plain_text", { text })),
-	pasteFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_entry", { filePathsJson })),
-	copyFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_file_entry", { filePathsJson })),
-	/**  Update the text content of a clipboard entry (Edit Content action) */
-	updateEntryContent: (id: number, content: string) => typedError<null, AppError>(__TAURI_INVOKE("update_entry_content", { id, content })),
-	/**  Append text to the current clipboard content */
-	appendToClipboard: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("append_to_clipboard", { text })),
-	/**  Save clipboard entry content to a file using a native save dialog */
-	saveEntryAsFile: (content: string, defaultName: string) => typedError<boolean, AppError>(__TAURI_INVOKE("save_entry_as_file", { content, defaultName })),
-	/**
-	 *  Paste content to the target app while keeping the Magpie window visible.
-	 *  Activates the target app (window stays on screen due to always_on_top),
-	 *  simulates Cmd+V, then re-focuses Magpie.
-	 */
-	pasteAndKeepWindow: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_and_keep_window", { text })),
-	/**  Paste an image entry while keeping the Magpie window visible. */
-	pasteImageAndKeepWindow: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_and_keep_window", { imagePath })),
-	/**  Paste file entries while keeping the Magpie window visible. */
-	pasteFileAndKeepWindow: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_and_keep_window", { filePathsJson })),
-	/**
-	 *  Export clipboard history to a JSON file via native save dialog.
-	 *  Returns the number of entries exported, or 0 if the user cancelled.
-	 */
-	exportClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("export_clipboard_history")),
-	/**
-	 *  Import clipboard history from a JSON file via native open dialog.
-	 *  Returns the number of entries imported (skipping duplicates).
-	 */
-	importClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("import_clipboard_history")),
-	getDefaultSettings: () => __TAURI_INVOKE<AppSettings>("get_default_settings"),
-	/**
-	 *  Re-register the global shortcut at runtime.
-	 * 
-	 *  The new shortcut is validated (parsed) BEFORE the old one is unregistered,
-	 *  so an invalid value can never leave the app with no shortcut. If a
-	 *  valid-but-unregisterable combination (e.g. already held by another app)
-	 *  fails to bind, we fall back to the default shortcut and return an error.
-	 */
-	updateGlobalShortcut: (shortcut: string) => typedError<null, AppError>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
-	/**  Show or hide the menu bar tray icon at runtime. */
-	setTrayVisible: (visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_tray_visible", { visible })),
-	/**
-	 *  Rebuild the native tray + app menu in the currently-persisted locale.
-	 *  Called by the frontend right after the language setting changes, so the OS
-	 *  menus switch language without requiring a restart.
-	 */
-	relocalizeMenus: () => __TAURI_INVOKE<void>("relocalize_menus"),
-	/**  Get the app icon as a base64-encoded PNG string for a given bundle ID */
-	getAppIcon: (bundleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { bundleId })),
-	getFileIcon: (filePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_file_icon", { filePath })),
-	/**  Hide the main window */
-	hideWindow: () => __TAURI_INVOKE<void>("hide_window"),
+  getClipboardEntries: (query: ClipboardQuery) => typedError<ClipboardEntry[], AppError>(__TAURI_INVOKE("get_clipboard_entries", { query })),
+  deleteClipboardEntry: (id: number) => typedError<null, AppError>(__TAURI_INVOKE("delete_clipboard_entry", { id })),
+  clearClipboardHistory: () => typedError<null, AppError>(__TAURI_INVOKE("clear_clipboard_history")),
+  togglePinEntry: (id: number) => typedError<boolean, AppError>(__TAURI_INVOKE("toggle_pin_entry", { id })),
+  renameClipboardEntry: (id: number, name: string) => typedError<null, AppError>(__TAURI_INVOKE("rename_clipboard_entry", { id, name })),
+  pasteClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_clipboard_entry", { text })),
+  /**  Paste an image entry by writing the saved PNG to the clipboard, then pasting. */
+  pasteImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
+  /**  Copy an image entry to the clipboard without pasting */
+  copyImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
+  copyClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_clipboard_entry", { text })),
+  pasteAsPlainText: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_as_plain_text", { text })),
+  pasteFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_entry", { filePathsJson })),
+  copyFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_file_entry", { filePathsJson })),
+  /**  Update the text content of a clipboard entry (Edit Content action) */
+  updateEntryContent: (id: number, content: string) => typedError<null, AppError>(__TAURI_INVOKE("update_entry_content", { id, content })),
+  /**  Append text to the current clipboard content */
+  appendToClipboard: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("append_to_clipboard", { text })),
+  /**  Save clipboard entry content to a file using a native save dialog */
+  saveEntryAsFile: (content: string, defaultName: string) => typedError<boolean, AppError>(__TAURI_INVOKE("save_entry_as_file", { content, defaultName })),
+  /**
+   *  Paste content to the target app while keeping the Magpie window visible.
+   *  Activates the target app (window stays on screen due to always_on_top),
+   *  simulates Cmd+V, then re-focuses Magpie.
+   */
+  pasteAndKeepWindow: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_and_keep_window", { text })),
+  /**  Paste an image entry while keeping the Magpie window visible. */
+  pasteImageAndKeepWindow: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_and_keep_window", { imagePath })),
+  /**  Paste file entries while keeping the Magpie window visible. */
+  pasteFileAndKeepWindow: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_and_keep_window", { filePathsJson })),
+  /**
+   *  Export clipboard history to a JSON file via native save dialog.
+   *  Returns the number of entries exported, or 0 if the user cancelled.
+   */
+  exportClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("export_clipboard_history")),
+  /**
+   *  Import clipboard history from a JSON file via native open dialog.
+   *  Returns the number of entries imported (skipping duplicates).
+   */
+  importClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("import_clipboard_history")),
+  getDefaultSettings: () => __TAURI_INVOKE<AppSettings>("get_default_settings"),
+  /**
+   *  Re-register the global shortcut at runtime.
+   *
+   *  The new shortcut is validated (parsed) BEFORE the old one is unregistered,
+   *  so an invalid value can never leave the app with no shortcut. If a
+   *  valid-but-unregisterable combination (e.g. already held by another app)
+   *  fails to bind, we fall back to the default shortcut and return an error.
+   */
+  updateGlobalShortcut: (shortcut: string) => typedError<null, AppError>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
+  /**  Show or hide the menu bar tray icon at runtime. */
+  setTrayVisible: (visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_tray_visible", { visible })),
+  /**
+   *  Rebuild the native tray + app menu in the currently-persisted locale.
+   *  Called by the frontend right after the language setting changes, so the OS
+   *  menus switch language without requiring a restart.
+   */
+  relocalizeMenus: () => __TAURI_INVOKE<void>("relocalize_menus"),
+  /**  Get the app icon as a base64-encoded PNG string for a given bundle ID */
+  getAppIcon: (bundleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { bundleId })),
+  getFileIcon: (filePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_file_icon", { filePath })),
+  /**  Hide the main window */
+  hideWindow: () => __TAURI_INVOKE<void>("hide_window"),
 };
 
 /* Types */
 /**
  *  Application-level error for the Rust side, surfaced to the frontend.
- * 
+ *
  *  Serializable + `specta::Type` and internally tagged on `kind`, so commands
  *  can return `Result<T, AppError>` and the generated TypeScript bindings get a
  *  typed discriminated union:
  *  `{ kind: "DbUnavailable" } | { kind: "Sql"; message: string } | …`.
- * 
+ *
  *  `Sql`/`Io` carry a `message: String` rather than the underlying
  *  `sqlx::Error` / `std::io::Error` (which are not serializable); the manual
  *  `From` impls below stringify them. `Display` still emits the same stable
@@ -87,55 +87,56 @@ export const commands = {
 export type AppError = { kind: "DbUnavailable" } | { kind: "Sql"; message: string } | { kind: "Io"; message: string } | { kind: "Validation"; message: string } | { kind: "Other"; message: string };
 
 /**  Settings */
-export type AppSettings = {
-	history_retention_days: number,
-	max_history_count: number,
-	default_action: string,
-	global_shortcut: string,
-	excluded_apps: string[],
-	theme: string,
-	launch_at_login: boolean,
-	move_to_top_on_use: boolean,
-	show_menu_bar_icon: boolean,
-};
+export interface AppSettings {
+  history_retention_days: number;
+  max_history_count: number;
+  default_action: string;
+  global_shortcut: string;
+  excluded_apps: string[];
+  theme: string;
+  launch_at_login: boolean;
+  move_to_top_on_use: boolean;
+  show_menu_bar_icon: boolean;
+}
 
 /**  A clipboard history entry */
-export type ClipboardEntry = {
-	id: number,
-	content_type: string,
-	text_content: string | null,
-	html_content: string | null,
-	image_path: string | null,
-	file_paths: string | null,
-	source_app: string | null,
-	source_app_name: string | null,
-	custom_name: string | null,
-	is_pinned: boolean,
-	is_favorite: boolean,
-	content_hash: string,
-	content_preview: string | null,
-	byte_size: number,
-	created_at: string,
-	accessed_at: string,
-	access_count: number,
-};
+export interface ClipboardEntry {
+  id: number;
+  content_type: string;
+  text_content: string | null;
+  html_content: string | null;
+  image_path: string | null;
+  file_paths: string | null;
+  source_app: string | null;
+  source_app_name: string | null;
+  custom_name: string | null;
+  is_pinned: boolean;
+  is_favorite: boolean;
+  content_hash: string;
+  content_preview: string | null;
+  byte_size: number;
+  created_at: string;
+  accessed_at: string;
+  access_count: number;
+}
 
 /**  Query parameters for fetching clipboard entries */
-export type ClipboardQuery = {
-	search: string | null,
-	content_type: string | null,
-	pinned_only: boolean,
-	limit: number,
-	offset: number,
-};
+export interface ClipboardQuery {
+  search: string | null;
+  content_type: string | null;
+  pinned_only: boolean;
+  limit: number;
+  offset: number;
+}
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
-    try {
-        return { status: "ok", data: await result };
-    } catch (e) {
-        if (e instanceof Error) throw e;
-        return { status: "error", error: e as any };
+  try {
+    return { status: "ok", data: await result };
+  } catch (e) {
+    if (e instanceof Error) {
+      throw e;
     }
+    return { status: "error", error: e as any };
+  }
 }
-
