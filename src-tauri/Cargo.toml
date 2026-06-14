@@ -1,6 +1,6 @@
 [package]
 name = "magpie"
-version = "0.4.4"
+version = "0.5.0"
 description = "A smart clipboard manager for macOS"
 authors = ["Kirk Lin"]
 license = "GPL-3.0-only"
