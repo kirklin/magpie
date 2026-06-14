@@ -35,8 +35,9 @@ interface SettingsStore {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  history_retention_days: 30,
-  max_history_count: 1000,
+  // Unlimited by default (-1): keep all history until the user opts into a cap.
+  history_retention_days: -1,
+  max_history_count: -1,
   default_action: "paste",
   theme: "system",
   global_shortcut: "CmdOrCtrl+Shift+V",

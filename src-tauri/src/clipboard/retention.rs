@@ -3,8 +3,11 @@ use tauri::{AppHandle, Manager};
 use crate::database::pool::get_pool;
 
 /// Fallbacks used when the corresponding setting is absent from settings.json.
-const DEFAULT_MAX_COUNT: i64 = 5000;
-const DEFAULT_RETENTION_DAYS: i64 = 30;
+/// Both default to -1 ("unlimited"): with no UI to configure retention yet, the
+/// app must never silently delete the user's history. A user who wants a cap can
+/// still set a positive value in settings.json; `prune_history` honors it.
+const DEFAULT_MAX_COUNT: i64 = -1;
+const DEFAULT_RETENTION_DAYS: i64 = -1;
 
 /// Read an integer setting from the persisted settings.json store, falling back
 /// to `default` when the file/key is missing or unreadable.
@@ -67,24 +70,36 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
         victims.extend(rows);
     }
 
-    if victims.is_empty() {
+    // A row can match both rules; dedup by id (keeping its image path) so we
+    // delete each exactly once.
+    let mut by_id: std::collections::HashMap<i64, Option<String>> = std::collections::HashMap::new();
+    for (id, image_path) in victims {
+        by_id.entry(id).or_insert(image_path);
+    }
+    if by_id.is_empty() {
         return Ok(());
     }
 
-    let mut deleted = 0u32;
-    for (id, image_path) in &victims {
-        let result = sqlx::query("DELETE FROM clipboard_entries WHERE id = ?")
-            .bind(id)
-            .execute(&pool)
-            .await;
-        if let Ok(r) = result {
-            if r.rows_affected() > 0 {
-                deleted += 1;
-                if let Some(path) = image_path {
-                    let _ = std::fs::remove_file(path);
-                }
-            }
+    // Delete in chunked batch statements instead of one round-trip per row.
+    // Chunked to stay well under SQLite's bound-parameter limit.
+    let ids: Vec<i64> = by_id.keys().copied().collect();
+    let mut deleted = 0u64;
+    for chunk in ids.chunks(500) {
+        let placeholders = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(",");
+        let sql = format!("DELETE FROM clipboard_entries WHERE id IN ({})", placeholders);
+        let mut q = sqlx::query(&sql);
+        for id in chunk {
+            q = q.bind(id);
         }
+        let res = q.execute(&pool).await.map_err(|e| e.to_string())?;
+        deleted += res.rows_affected();
+    }
+
+    // Remove the image files of the pruned rows from disk. Each image filename is
+    // its content hash and UNIQUE(content_hash) means one row per file, so a
+    // pruned row's image is never referenced by a surviving row.
+    for path in by_id.values().flatten() {
+        let _ = std::fs::remove_file(path);
     }
 
     if deleted > 0 {

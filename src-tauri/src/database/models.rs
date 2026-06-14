@@ -106,8 +106,10 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            history_retention_days: 30,
-            max_history_count: 5000,
+            // Unlimited by default (-1): never silently prune history while there
+            // is no UI to configure these limits.
+            history_retention_days: -1,
+            max_history_count: -1,
             default_action: "paste".to_string(),
             global_shortcut: "CmdOrCtrl+Shift+V".to_string(),
             excluded_apps: vec![],
