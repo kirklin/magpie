@@ -1,5 +1,7 @@
-/** Format relative time in Chinese */
-export function formatRelativeTime(dateStr: string): string {
+import { type Locale, t } from "../i18n";
+
+/** Format relative time in the given locale (defaults to zh). */
+export function formatRelativeTime(dateStr: string, locale: Locale = "zh"): string {
   const date = new Date(`${dateStr}Z`); // UTC
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -9,24 +11,24 @@ export function formatRelativeTime(dateStr: string): string {
   const diffDay = Math.floor(diffHour / 24);
 
   if (diffSec < 10) {
-    return "刚刚";
+    return t(locale, "time.just_now");
   }
   if (diffSec < 60) {
-    return `${diffSec}秒前`;
+    return t(locale, "time.sec_ago", { n: diffSec });
   }
   if (diffMin < 60) {
-    return `${diffMin}分钟前`;
+    return t(locale, "time.min_ago", { n: diffMin });
   }
   if (diffHour < 24) {
-    return `${diffHour}小时前`;
+    return t(locale, "time.hour_ago", { n: diffHour });
   }
   if (diffDay < 7) {
-    return `${diffDay}天前`;
+    return t(locale, "time.day_ago", { n: diffDay });
   }
   if (diffDay < 30) {
-    return `${Math.floor(diffDay / 7)}周前`;
+    return t(locale, "time.week_ago", { n: Math.floor(diffDay / 7) });
   }
-  return date.toLocaleDateString("zh-CN");
+  return date.toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US");
 }
 
 /** Format byte size */

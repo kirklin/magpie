@@ -2,8 +2,10 @@ import type { ViewName } from "./stores/navigation";
 import { listen } from "@tauri-apps/api/event";
 import Database from "@tauri-apps/plugin-sql";
 import { useEffect, useState } from "react";
+import { useT } from "./i18n";
 import { parseAppError } from "./lib/error";
 import { useNavigationStore } from "./stores/navigation";
+import { useSettingsStore } from "./stores/settings";
 import { AboutView } from "./views/AboutView";
 import { ClipboardHistory } from "./views/ClipboardHistory";
 import { SettingsView } from "./views/SettingsView";
@@ -13,8 +15,14 @@ function App() {
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const { currentView, navigateTo } = useNavigationStore();
+  const loadSettings = useSettingsStore(s => s.loadSettings);
+  const t = useT();
 
   useEffect(() => {
+    // Load persisted settings (locale, theme, accent) at startup so they apply
+    // before any view mounts — not only after the Settings screen is opened.
+    loadSettings();
+
     // Initialize the SQLite database (this triggers migrations)
     Database.load("sqlite:magpie.db")
       .then(() => {
@@ -38,21 +46,21 @@ function App() {
     return () => {
       unlisten.then(f => f());
     };
-  }, [navigateTo]);
+  }, [navigateTo, loadSettings]);
 
   let content;
   if (!dbReady) {
     content = (
       <div className="flex items-center justify-center h-full text-text-secondary text-sm">
-        初始化中…
+        {t("init.loading")}
       </div>
     );
   } else if (dbError) {
     content = (
       <div className="flex flex-col items-center justify-center h-full gap-2 px-6 text-center">
-        <div className="text-sm font-medium text-text-primary">数据库初始化失败</div>
+        <div className="text-sm font-medium text-text-primary">{t("init.db_failed_title")}</div>
         <div className="text-xs text-text-secondary break-all">{dbError}</div>
-        <div className="text-xs text-text-secondary">请重启 Magpie；若反复出现，请检查磁盘空间或重新安装。</div>
+        <div className="text-xs text-text-secondary">{t("init.db_failed_desc")}</div>
       </div>
     );
   } else {

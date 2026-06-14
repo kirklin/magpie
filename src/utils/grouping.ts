@@ -1,5 +1,11 @@
+import type { Locale } from "../i18n";
+import { t } from "../i18n";
+
 /** Group entries by date, with pinned items in a dedicated top group */
-export function groupByDate(entries: Array<{ accessed_at: string; is_pinned?: boolean }>): Map<string, typeof entries> {
+export function groupByDate(
+  entries: Array<{ accessed_at: string; is_pinned?: boolean }>,
+  locale: Locale = "zh",
+): Map<string, typeof entries> {
   const groups = new Map<string, typeof entries>();
   const now = new Date();
   const today = now.toDateString();
@@ -12,7 +18,7 @@ export function groupByDate(entries: Array<{ accessed_at: string; is_pinned?: bo
   const unpinned = entries.filter(e => !e.is_pinned);
 
   if (pinned.length > 0) {
-    groups.set("Pinned", pinned);
+    groups.set(t(locale, "group.pinned"), pinned);
   }
 
   for (const entry of unpinned) {
@@ -21,11 +27,11 @@ export function groupByDate(entries: Array<{ accessed_at: string; is_pinned?: bo
 
     let label: string;
     if (dateStr === today) {
-      label = "Today";
+      label = t(locale, "group.today");
     } else if (dateStr === yesterdayStr) {
-      label = "Yesterday";
+      label = t(locale, "group.yesterday");
     } else {
-      label = date.toLocaleDateString("zh-CN", {
+      label = date.toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
         month: "long",
         day: "numeric",
         weekday: "short",

@@ -8,6 +8,7 @@ import { SettingToggle } from "../components/settings/SettingToggle";
 import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { ThemePicker } from "../components/settings/ThemePicker";
 import { useToastStore } from "../components/Toast";
+import { type Locale, useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
@@ -18,6 +19,7 @@ export function SettingsView() {
   const { isLoading, loadSettings, settings, updateSetting } = useSettingsStore();
   const { clearHistory, exportHistory, importHistory } = useClipboardStore();
   const addToast = useToastStore(s => s.add);
+  const t = useT();
   const [autostart, setAutostart] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -68,10 +70,10 @@ export function SettingsView() {
     try {
       const count = await exportHistory();
       if (count > 0) {
-        addToast(`已导出 ${count} 条记录`);
+        addToast(t("settings.exported", { n: count }));
       }
     } catch (e) {
-      addToast(`导出失败: ${parseAppError(e).message}`, "error");
+      addToast(t("settings.export_failed", { msg: parseAppError(e).message }), "error");
     } finally {
       setIsExporting(false);
     }
@@ -82,12 +84,12 @@ export function SettingsView() {
     try {
       const count = await importHistory();
       if (count > 0) {
-        addToast(`已导入 ${count} 条新记录`);
+        addToast(t("settings.imported", { n: count }));
       } else {
-        addToast("没有新记录需要导入", "info");
+        addToast(t("settings.import_none"), "info");
       }
     } catch (e) {
-      addToast(`导入失败: ${parseAppError(e).message}`, "error");
+      addToast(t("settings.import_failed", { msg: parseAppError(e).message }), "error");
     } finally {
       setIsImporting(false);
     }
@@ -96,7 +98,7 @@ export function SettingsView() {
   const handleShortcutChange = async (shortcut: string) => {
     try {
       await updateSetting("global_shortcut", shortcut);
-      addToast("快捷键已更新");
+      addToast(t("settings.shortcut_updated"));
     } catch (e) {
       addToast(parseAppError(e).message, "error");
     }
@@ -117,37 +119,46 @@ export function SettingsView() {
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="ml-2 text-sm font-medium text-text-primary">
-          设置
+          {t("settings.title")}
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 px-5 pb-10 overflow-y-auto">
         <div className="mt-4">
-          <SettingGroup title="通用">
+          <SettingGroup title={t("settings.section.general")}>
             <SettingToggle
               checked={autostart}
-              label="开机自启"
+              label={t("settings.autostart")}
               onChange={handleAutostartChange}
             />
             <SettingToggle
               checked={settings.show_menu_bar_icon}
-              description="关闭后需要通过快捷键唤起应用"
-              label="显示菜单栏图标"
+              description={t("settings.autostart_desc")}
+              label={t("settings.menubar_icon")}
               onChange={val => updateSetting("show_menu_bar_icon", val)}
             />
             <SettingSelect
-              label="默认双击操作"
+              label={t("settings.default_action")}
               options={[
-                { label: "直接粘贴 (推荐)", value: "paste" },
-                { label: "仅复制", value: "copy" },
+                { label: t("settings.action_paste"), value: "paste" },
+                { label: t("settings.action_copy"), value: "copy" },
               ]}
               value={settings.default_action}
               onChange={val => updateSetting("default_action", val as "copy" | "paste")}
             />
+            <SettingSelect
+              label={t("settings.language")}
+              options={[
+                { label: "中文", value: "zh" },
+                { label: "English", value: "en" },
+              ]}
+              value={settings.locale}
+              onChange={val => updateSetting("locale", val as Locale)}
+            />
           </SettingGroup>
 
-          <SettingGroup title="外观">
+          <SettingGroup title={t("settings.section.appearance")}>
             <ThemePicker
               value={settings.theme}
               onChange={val => updateSetting("theme", val)}
@@ -158,20 +169,20 @@ export function SettingsView() {
             />
           </SettingGroup>
 
-          <SettingGroup title="快捷键">
+          <SettingGroup title={t("settings.section.shortcut")}>
             <ShortcutRecorder
-              label="唤起窗口"
-              description="全局快捷键，在任意应用中唤起 Magpie"
+              label={t("settings.shortcut_toggle")}
+              description={t("settings.shortcut_toggle_desc")}
               value={settings.global_shortcut}
               onChange={handleShortcutChange}
             />
           </SettingGroup>
 
-          <SettingGroup title="数据">
+          <SettingGroup title={t("settings.section.data")}>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
-                <div className="text-[13px] text-text-primary">导出历史记录</div>
-                <div className="text-[11px] text-text-tertiary mt-0.5">导出所有记录为 JSON 文件</div>
+                <div className="text-[13px] text-text-primary">{t("settings.export_history")}</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">{t("settings.export_history_desc")}</div>
               </div>
               <button
                 className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-text-secondary bg-bg-hover hover:bg-bg-active hover:text-text-primary disabled:opacity-50"
@@ -179,13 +190,13 @@ export function SettingsView() {
                 onClick={handleExport}
               >
                 <Download className="w-3.5 h-3.5" />
-                {isExporting ? "导出中…" : "导出"}
+                {isExporting ? t("settings.exporting") : t("settings.export")}
               </button>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
-                <div className="text-[13px] text-text-primary">导入历史记录</div>
-                <div className="text-[11px] text-text-tertiary mt-0.5">从 JSON 文件导入，自动跳过重复</div>
+                <div className="text-[13px] text-text-primary">{t("settings.import_history")}</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">{t("settings.import_history_desc")}</div>
               </div>
               <button
                 className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-text-secondary bg-bg-hover hover:bg-bg-active hover:text-text-primary disabled:opacity-50"
@@ -193,20 +204,20 @@ export function SettingsView() {
                 onClick={handleImport}
               >
                 <Upload className="w-3.5 h-3.5" />
-                {isImporting ? "导入中…" : "导入"}
+                {isImporting ? t("settings.importing") : t("settings.import")}
               </button>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
-                <div className="text-[13px] text-text-primary">清空剪贴板历史</div>
-                <div className="text-[11px] text-text-tertiary mt-0.5">已置顶的记录不会被删除</div>
+                <div className="text-[13px] text-text-primary">{t("settings.clear_history")}</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">{t("settings.clear_history_desc")}</div>
               </div>
               <button
                 className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors text-red-400 bg-red-500/10 hover:bg-red-500/20"
                 onClick={() => setShowClearConfirm(true)}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                清空
+                {t("settings.clear")}
               </button>
             </div>
           </SettingGroup>
@@ -224,23 +235,23 @@ export function SettingsView() {
             onClick={e => e.stopPropagation()}
           >
             <div className="text-[15px] font-semibold text-text-primary text-center">
-              确认清空
+              {t("settings.clear_confirm_title")}
             </div>
             <div className="mt-2 text-[13px] text-text-secondary text-center leading-relaxed">
-              将删除所有未置顶的剪贴板记录，此操作无法撤销。
+              {t("settings.clear_confirm_desc")}
             </div>
             <div className="mt-5 flex gap-3">
               <button
                 className="flex-1 py-2 text-[13px] font-medium rounded-lg bg-bg-hover text-text-primary hover:bg-bg-active transition-colors"
                 onClick={() => setShowClearConfirm(false)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="flex-1 py-2 text-[13px] font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
                 onClick={handleClearHistory}
               >
-                确认清空
+                {t("settings.clear_confirm_title")}
               </button>
             </div>
           </div>

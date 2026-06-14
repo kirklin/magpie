@@ -1,3 +1,4 @@
+import type { Locale } from "../i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { Store } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
@@ -25,6 +26,7 @@ export interface AppSettings {
   global_shortcut: string;
   accent_color: AccentColorId;
   show_menu_bar_icon: boolean;
+  locale: Locale;
 }
 
 interface SettingsStore {
@@ -43,6 +45,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   global_shortcut: "CmdOrCtrl+Shift+V",
   accent_color: "blue",
   show_menu_bar_icon: true,
+  locale: "zh",
 };
 
 let storeInstance: Store | null = null;
@@ -112,7 +115,10 @@ export const useSettingsStore = create<SettingsStore>(set => ({
       }
 
       const backendDefaults = await invoke<AppSettings>("get_default_settings").catch(() => DEFAULT_SETTINGS);
-      const loadedSettings = { ...backendDefaults };
+      // Start from the frontend defaults so frontend-only keys (e.g. locale,
+      // which the Rust AppSettings doesn't carry) get a value, then let the
+      // backend defaults and finally the persisted store override.
+      const loadedSettings = { ...DEFAULT_SETTINGS, ...backendDefaults };
 
       for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof AppSettings>) {
         const val = await storeInstance.get(key);

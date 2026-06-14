@@ -21,9 +21,9 @@ describe("groupByDate", () => {
       { accessed_at: "2026-06-13 08:00:00", is_pinned: false },
       { accessed_at: "2026-01-01 08:00:00", is_pinned: true },
     ]);
-    expect([...groups.keys()][0]).toBe("Pinned");
-    expect(groups.get("Pinned")).toHaveLength(1);
-    expect(groups.get("Pinned")![0].accessed_at).toBe("2026-01-01 08:00:00");
+    expect([...groups.keys()][0]).toBe("置顶");
+    expect(groups.get("置顶")).toHaveLength(1);
+    expect(groups.get("置顶")![0].accessed_at).toBe("2026-01-01 08:00:00");
   });
 
   it("labels same-day entries Today and prior-day Yesterday", () => {
@@ -31,8 +31,8 @@ describe("groupByDate", () => {
       { accessed_at: "2026-06-13 08:00:00", is_pinned: false },
       { accessed_at: "2026-06-12 23:00:00", is_pinned: false },
     ]);
-    expect(groups.get("Today")).toHaveLength(1);
-    expect(groups.get("Yesterday")).toHaveLength(1);
+    expect(groups.get("今天")).toHaveLength(1);
+    expect(groups.get("昨天")).toHaveLength(1);
   });
 
   it("groups older entries under a localized date label", () => {
@@ -44,8 +44,8 @@ describe("groupByDate", () => {
       weekday: "short",
     });
     expect(groups.has(expectedLabel)).toBe(true);
-    expect(groups.has("Today")).toBe(false);
-    expect(groups.has("Yesterday")).toBe(false);
+    expect(groups.has("今天")).toBe(false);
+    expect(groups.has("昨天")).toBe(false);
   });
 
   it("keeps multiple entries from the same day in one group", () => {
@@ -53,6 +53,6 @@ describe("groupByDate", () => {
       { accessed_at: "2026-06-13 09:00:00", is_pinned: false },
       { accessed_at: "2026-06-13 10:00:00", is_pinned: false },
     ]);
-    expect(groups.get("Today")).toHaveLength(2);
+    expect(groups.get("今天")).toHaveLength(2);
   });
 });
