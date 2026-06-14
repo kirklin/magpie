@@ -199,10 +199,11 @@ pub fn run() {
 
                     // Also show a notification so the user knows
                     use tauri_plugin_notification::NotificationExt;
+                    let loc = i18n::read_locale(app.handle());
                     let _ = app.notification()
                         .builder()
-                        .title("Magpie 需要辅助功能权限")
-                        .body("请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie，否则无法粘贴内容到其他应用。")
+                        .title(i18n::tr(loc, "notify.accessibility_title"))
+                        .body(i18n::tr(loc, "notify.accessibility_body"))
                         .show();
                 }
             }

@@ -47,11 +47,14 @@ pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) ->
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
     let global_shortcut = app_handle.global_shortcut();
+    let loc = crate::i18n::read_locale(&app_handle);
 
     // Validate the format first — no side effects if this fails.
     let parsed: Shortcut = shortcut
         .parse()
-        .map_err(|_| AppError::Validation { message: format!("快捷键格式无效: {}", shortcut) })?;
+        .map_err(|_| AppError::Validation {
+            message: format!("{}{}", crate::i18n::tr(loc, "err.shortcut_invalid"), shortcut),
+        })?;
 
     // Now it's safe to drop the old binding and install the new one.
     global_shortcut
@@ -74,7 +77,9 @@ pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) ->
                 crate::toggle_window(&handle);
             }
         });
-        return Err(AppError::Validation { message: format!("无法注册快捷键 '{}': {}", shortcut, e) });
+        return Err(AppError::Validation {
+            message: format!("{}'{}': {}", crate::i18n::tr(loc, "err.shortcut_register_failed"), shortcut, e),
+        });
     }
 
     log::info!("Global shortcut updated to: {}", shortcut);

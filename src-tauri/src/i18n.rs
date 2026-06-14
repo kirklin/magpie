@@ -62,6 +62,25 @@ pub fn tr(locale: Locale, key: &str) -> &'static str {
         "menu.window" => pick!("窗口", "Window"),
         "menu.close_window" => pick!("关闭窗口", "Close Window"),
         "menu.minimize" => pick!("最小化", "Minimize"),
+        // notifications
+        "notify.accessibility_title" => pick!("Magpie 需要辅助功能权限", "Magpie needs Accessibility permission"),
+        "notify.accessibility_body" => pick!(
+            "请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie，否则无法粘贴内容到其他应用。",
+            "Enable Magpie under System Settings → Privacy & Security → Accessibility, otherwise it can't paste into other apps."
+        ),
+        "notify.paste_failed_title" => pick!("Magpie 无法自动粘贴", "Magpie can't auto-paste"),
+        "notify.paste_failed_body" => pick!(
+            "内容已复制到剪贴板。请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie 以启用自动粘贴。",
+            "Content was copied to the clipboard. Enable Magpie under System Settings → Privacy & Security → Accessibility to auto-paste."
+        ),
+        // error message prefixes / standalone messages
+        "err.no_accessibility" => pick!("缺少辅助功能权限，无法模拟粘贴", "Missing Accessibility permission; can't synthesize paste"),
+        "err.shortcut_invalid" => pick!("快捷键格式无效: ", "Invalid shortcut format: "),
+        "err.shortcut_register_failed" => pick!("无法注册快捷键 ", "Couldn't register shortcut "),
+        "err.import_parse_failed" => pick!("无法解析导入文件: ", "Couldn't parse the import file: "),
+        "err.import_invalid" => pick!("不是有效的 Magpie 导出文件", "Not a valid Magpie export file"),
+        // native dialogs
+        "panel.import_message" => pick!("选择 Magpie 导出文件", "Select a Magpie export file"),
         _ => "?",
     }
 }

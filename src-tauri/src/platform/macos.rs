@@ -440,14 +440,15 @@ impl Paster for MacPaster {
         // content is already on the clipboard, so the user can paste manually.
         if !crate::check_accessibility_permission() {
             use tauri_plugin_notification::NotificationExt;
+            let loc = crate::i18n::read_locale(&self.app);
             let _ = self
                 .app
                 .notification()
                 .builder()
-                .title("Magpie 无法自动粘贴")
-                .body("内容已复制到剪贴板。请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie 以启用自动粘贴。")
+                .title(crate::i18n::tr(loc, "notify.paste_failed_title"))
+                .body(crate::i18n::tr(loc, "notify.paste_failed_body"))
                 .show();
-            return Err("缺少辅助功能权限，无法模拟粘贴".to_string());
+            return Err(crate::i18n::tr(loc, "err.no_accessibility").to_string());
         }
 
         simulate_paste_keystroke();

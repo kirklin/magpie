@@ -110,12 +110,13 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, AppE
 #[tauri::command]
 #[specta::specta]
 pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, AppError> {
+    let loc = crate::i18n::read_locale(&app_handle);
     // 1. Show native open dialog to pick a JSON file and read it.
     let json_content: String;
 
     #[cfg(target_os = "macos")]
     {
-        match native::run_open_panel(&app_handle, "选择 Magpie 导出文件") {
+        match native::run_open_panel(&app_handle, crate::i18n::tr(loc, "panel.import_message")) {
             Some(path) => match std::fs::read_to_string(&path) {
                 Ok(content) => json_content = content,
                 Err(_) => return Ok(0),
@@ -131,10 +132,12 @@ pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, AppE
 
     // 2. Parse the JSON
     let export_data: ExportData = serde_json::from_str(&json_content)
-        .map_err(|e| AppError::Validation { message: format!("无法解析导入文件: {}", e) })?;
+        .map_err(|e| AppError::Validation {
+            message: format!("{}{}", crate::i18n::tr(loc, "err.import_parse_failed"), e),
+        })?;
 
     if export_data.app != "Magpie" {
-        return Err(AppError::Validation { message: "不是有效的 Magpie 导出文件".to_string() });
+        return Err(AppError::Validation { message: crate::i18n::tr(loc, "err.import_invalid").to_string() });
     }
 
     // 3. Insert entries into the database, skipping duplicates
