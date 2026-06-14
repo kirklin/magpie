@@ -3,6 +3,7 @@ mod commands;
 mod database;
 mod error;
 mod menu;
+mod platform;
 mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -140,6 +141,13 @@ pub fn run() {
         // --- Setup ---
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Build the platform adapters (clipboard + paste-back) for this OS
+            // and expose them to the monitor and IPC commands via managed state.
+            // This is the single place an OS implementation is selected.
+            let (clipboard_port, paster_port) = platform::build(&handle);
+            app.manage(clipboard_port);
+            app.manage(paster_port);
 
             // Disable App Nap — macOS suspends Accessory apps when the window
             // is hidden, which kills our clipboard monitor timer.
@@ -327,7 +335,8 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
             let _ = window.hide();
         } else {
             // Get previous active app before showing Magpie
-            let (bundle_id, name) = clipboard::paste::get_frontmost_app(handle);
+            let info = handle.state::<platform::PasterPort>().frontmost_app();
+            let (bundle_id, name) = (info.bundle_id, info.name);
 
             // Save the bundle_id for paste-and-keep-window
             if let Some(ref bid) = bundle_id {
@@ -353,7 +362,8 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
 /// Show and focus the main window
 pub fn show_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
-        let (bundle_id, name) = clipboard::paste::get_frontmost_app(handle);
+        let info = handle.state::<platform::PasterPort>().frontmost_app();
+        let (bundle_id, name) = (info.bundle_id, info.name);
 
         // Save the bundle_id for paste-and-keep-window
         if let Some(ref bid) = bundle_id {

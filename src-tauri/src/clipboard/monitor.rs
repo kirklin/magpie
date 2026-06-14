@@ -9,6 +9,7 @@ use tauri_plugin_sql::DbInstances;
 use super::classifier::ContentClassifier;
 use crate::database::pool::get_pool;
 use crate::error::AppError;
+use crate::platform::{AppInfo, Captured, ClipboardPort, PasterPort};
 
 /// Clipboard monitor state shared across threads
 pub struct ClipboardMonitorState {
@@ -56,7 +57,8 @@ pub fn start_monitor(app_handle: AppHandle) {
     state.is_running.store(true, Ordering::SeqCst);
     let state_clone = Arc::clone(&state);
     let classifier = ContentClassifier::new();
-    // classifier is wrapped in Arc inside the loop below
+    let clipboard: ClipboardPort = app_handle.state::<ClipboardPort>().inner().clone();
+    let paster: PasterPort = app_handle.state::<PasterPort>().inner().clone();
 
     tauri::async_runtime::spawn(async move {
         log::info!("Clipboard monitor started, waiting for DB...");
@@ -137,8 +139,9 @@ pub fn start_monitor(app_handle: AppHandle) {
                 break;
             }
 
-            // Read the current pasteboard change count (an integer).
-            if let Some(current) = current_change_count(&app_handle) {
+            // Read the current clipboard change token (an integer) via the
+            // platform port. macOS implements this as NSPasteboard.changeCount.
+            if let Some(current) = clipboard.change_token() {
                 let last = state_clone.last_change_count.load(Ordering::SeqCst);
                 if current != last && current >= 0 {
                     // Claim the change immediately. This stops the next poll from
@@ -147,16 +150,28 @@ pub fn start_monitor(app_handle: AppHandle) {
                     // reader — serializing captures here (the old in-flight guard)
                     // dropped fast successive copies, which is what regressed.
                     state_clone.last_change_count.store(current, Ordering::SeqCst);
-                    log::debug!("Pasteboard changeCount: {} -> {}", last, current);
+                    log::debug!("Clipboard change token: {} -> {}", last, current);
 
                     // Spawn processing in a separate task so we NEVER block the poller.
                     let app = app_handle.clone();
                     let cls = classifier.clone();
                     let st = Arc::clone(&state_clone);
+                    let clip = clipboard.clone();
+                    let pst = paster.clone();
                     tokio::spawn(async move {
                         let result = tokio::time::timeout(
                             Duration::from_secs(5),
-                            read_clipboard_and_store(&app, &cls),
+                            async {
+                                // Read the whole clipboard as one snapshot via the
+                                // platform port. None = sensitive/unrecognized.
+                                let Some(captured) = clip.read() else {
+                                    return Ok(None);
+                                };
+                                // Attribute the source app once, right after the
+                                // read, so it can't drift from the content.
+                                let source = pst.frontmost_app();
+                                store_captured(&app, &cls, captured, source).await
+                            },
                         ).await;
 
                         match result {
@@ -200,297 +215,37 @@ pub fn start_monitor(app_handle: AppHandle) {
     });
 }
 
-/// Read the current pasteboard change count (an integer) on the main thread.
-/// Returns `None` if the dispatch or read fails/times out — the caller treats
-/// `None` as "no reliable reading this tick" and simply retries next poll,
-/// rather than mistaking it for "no change".
-#[cfg(target_os = "macos")]
-fn current_change_count(app_handle: &AppHandle) -> Option<i64> {
-    use std::sync::mpsc;
-
-    let (tx, rx) = mpsc::channel();
-    let dispatched = app_handle.run_on_main_thread(move || {
-        use objc2_app_kit::NSPasteboard;
-        use objc2::rc::autoreleasepool;
-
-        let count = autoreleasepool(|_| {
-            let pasteboard = NSPasteboard::generalPasteboard();
-            pasteboard.changeCount() as i64
-        });
-        let _ = tx.send(count);
-    });
-
-    if dispatched.is_err() {
-        return None;
-    }
-
-    rx.recv_timeout(std::time::Duration::from_millis(100)).ok()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn current_change_count(_app_handle: &AppHandle) -> Option<i64> {
-    None
-}
-
-/// Mark the current pasteboard state as "already seen" by the monitor.
+/// Mark the current clipboard state as "already seen" by the monitor.
 ///
 /// Call this immediately after Magpie itself writes to the clipboard (paste or
 /// copy actions). Otherwise the monitor detects that write as a brand-new
 /// clipboard change and re-captures it — creating spurious history entries and
 /// bumping the just-used item to the top in a feedback loop.
 pub fn mark_self_write(app_handle: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(count) = current_change_count(app_handle) {
-            let state = app_handle.state::<Arc<ClipboardMonitorState>>();
-            state.last_change_count.store(count, Ordering::SeqCst);
-        }
+    let clipboard = app_handle.state::<ClipboardPort>();
+    if let Some(token) = clipboard.change_token() {
+        let state = app_handle.state::<Arc<ClipboardMonitorState>>();
+        state.last_change_count.store(token, Ordering::SeqCst);
     }
 }
 
-/// Read clipboard content and store. Called AFTER change is detected.
-async fn read_clipboard_and_store(
+/// Dispatch a captured clipboard snapshot to the right store routine. The
+/// source app has already been attributed by the caller.
+async fn store_captured(
     app_handle: &AppHandle,
     classifier: &ContentClassifier,
+    captured: Captured,
+    source: AppInfo,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
-
-    // Step 2: The pasteboard changed — determine what's on it.
-
-    // 2.0 Respect the de-facto-standard "concealed/transient" pasteboard markers
-    // that password managers and similar apps set, so we never persist passwords
-    // or other sensitive, short-lived content.
-    #[cfg(target_os = "macos")]
-    {
-        if pasteboard_is_concealed(app_handle) {
-            log::debug!("Skipping concealed/transient pasteboard content");
-            return Ok(None);
+    match captured {
+        Captured::Files { paths } => store_file_entry(app_handle, paths, source).await,
+        Captured::Text { text, html } => {
+            store_text_entry(app_handle, classifier, text, html, source).await
+        }
+        Captured::Image { rgba, width, height } => {
+            store_image_entry(app_handle, rgba, width, height, source).await
         }
     }
-
-    // 2a. Check for file URLs on the pasteboard first (macOS native)
-    #[cfg(target_os = "macos")]
-    {
-        let file_paths = read_file_urls_from_pasteboard(app_handle);
-        if !file_paths.is_empty() {
-            return store_file_entry(app_handle, file_paths).await;
-        }
-    }
-
-    // 2b. Try to read plain text content
-    let text_result = app_handle.clipboard().read_text();
-
-    match text_result {
-        Ok(text) if !text.is_empty() => {
-            store_text_entry(app_handle, classifier, text, None).await
-        }
-        _ => {
-            // 2c. Fallback: rich content that exposes only an HTML flavor with no
-            // plain-text representation (some editors / web apps). Capture the
-            // HTML and store a stripped plain-text version for display/search.
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(html) = read_html_from_pasteboard(app_handle) {
-                    let plain = html_to_plain_text(&html);
-                    if !plain.is_empty() {
-                        return store_text_entry(app_handle, classifier, plain, Some(html)).await;
-                    }
-                }
-            }
-
-            // 2d. Try to read image
-            match app_handle.clipboard().read_image() {
-                Ok(image_data) => {
-                    store_image_entry(app_handle, image_data).await
-                }
-                Err(_) => {
-                    log::debug!("Pasteboard changed but no recognizable content found");
-                    Ok(None)
-                },
-            }
-        }
-    }
-}
-
-/// Read an HTML representation from the pasteboard, if present.
-#[cfg(target_os = "macos")]
-fn read_html_from_pasteboard(app_handle: &AppHandle) -> Option<String> {
-    use std::sync::mpsc;
-
-    let (tx, rx) = mpsc::channel();
-    let dispatched = app_handle.run_on_main_thread(move || {
-        use objc2_app_kit::NSPasteboard;
-        use objc2_foundation::NSString;
-        use objc2::rc::autoreleasepool;
-
-        let html = autoreleasepool(|_| {
-            let pasteboard = NSPasteboard::generalPasteboard();
-            let html_type = NSString::from_str("public.html");
-            pasteboard
-                .stringForType(&html_type)
-                .map(|s| s.to_string())
-                .filter(|s| !s.is_empty())
-        });
-        let _ = tx.send(html);
-    });
-
-    if dispatched.is_err() {
-        return None;
-    }
-
-    rx.recv_timeout(std::time::Duration::from_millis(150)).ok().flatten()
-}
-
-/// Strip HTML markup down to a readable plain-text approximation.
-#[cfg(target_os = "macos")]
-fn html_to_plain_text(html: &str) -> String {
-    use regex::Regex;
-
-    // Drop <script>/<style> blocks entirely, then all remaining tags.
-    let re = Regex::new(r"(?is)<(script|style)\b[^>]*>.*?</(script|style)>|<[^>]+>").unwrap();
-    let stripped = re.replace_all(html, " ");
-    let decoded = stripped
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'");
-    // Collapse runs of whitespace.
-    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Returns true if the general pasteboard carries one of the standard markers
-/// used to indicate sensitive/transient content that should not be recorded
-/// (e.g. passwords copied from a password manager).
-#[cfg(target_os = "macos")]
-fn pasteboard_is_concealed(app_handle: &AppHandle) -> bool {
-    use std::sync::mpsc;
-
-    let (tx, rx) = mpsc::channel();
-    let dispatched = app_handle.run_on_main_thread(move || {
-        use objc2_app_kit::NSPasteboard;
-        use objc2::rc::autoreleasepool;
-
-        let concealed = autoreleasepool(|_| {
-            let pasteboard = NSPasteboard::generalPasteboard();
-            NSPasteboard::types(&pasteboard).is_some_and(|types| {
-                types.iter().any(|t| {
-                    matches!(
-                        t.to_string().as_str(),
-                        "org.nspasteboard.ConcealedType"
-                            | "org.nspasteboard.TransientType"
-                            | "org.nspasteboard.AutoGeneratedType"
-                    )
-                })
-            })
-        });
-        let _ = tx.send(concealed);
-    });
-
-    if dispatched.is_err() {
-        return false;
-    }
-
-    rx.recv_timeout(std::time::Duration::from_millis(100))
-        .unwrap_or(false)
-}
-
-/// Read file URLs from macOS NSPasteboard.
-/// IMPORTANT: Must dispatch to main thread since NSPasteboard is not thread-safe.
-#[cfg(target_os = "macos")]
-fn read_file_urls_from_pasteboard(app_handle: &AppHandle) -> Vec<String> {
-    use std::sync::mpsc;
-
-    let (tx, rx) = mpsc::channel();
-    let dispatched = app_handle.run_on_main_thread(move || {
-        use objc2_app_kit::NSPasteboard;
-        use objc2_foundation::{NSString, NSArray, NSURL};
-        use objc2::rc::autoreleasepool;
-
-        let result = autoreleasepool(|_| {
-            let pasteboard = NSPasteboard::generalPasteboard();
-
-            // Check if the pasteboard contains file URLs
-            let types = NSPasteboard::types(&pasteboard);
-            let has_file_url = types.map_or(false, |ts| {
-                ts.iter().any(|t| {
-                    let s = t.to_string();
-                    s == "public.file-url" || s == "NSFilenamesPboardType"
-                })
-            });
-
-            if !has_file_url {
-                return vec![];
-            }
-
-            // Method 1: Use NSFilenamesPboardType which returns actual file paths.
-            // propertyListForType returns an untyped object; downcast it (a runtime
-            // class check) instead of transmuting + unwrapping, so a malformed
-            // pasteboard falls through to Method 2 rather than risking UB on iter.
-            let filenames_type = NSString::from_str("NSFilenamesPboardType");
-            if let Some(array) = pasteboard
-                .propertyListForType(&filenames_type)
-                .and_then(|obj| obj.downcast::<NSArray>().ok())
-            {
-                let mut paths: Vec<String> = Vec::new();
-                for item in array.iter() {
-                    if let Some(path) = item.downcast_ref::<NSString>() {
-                        let p = path.to_string();
-                        if !p.is_empty() {
-                            paths.push(p);
-                        }
-                    }
-                }
-
-                if !paths.is_empty() {
-                    return paths;
-                }
-            }
-
-            // Method 2: Read NSURL from pasteboard items and resolve via NSURL
-            let file_url_type = NSString::from_str("public.file-url");
-            if let Some(items) = pasteboard.pasteboardItems() {
-                let mut paths: Vec<String> = Vec::new();
-                for item in items.iter() {
-                    if let Some(url_string) = item.stringForType(&file_url_type) {
-                        let ns_url_str = url_string.to_string();
-                        let ns_str = NSString::from_str(&ns_url_str);
-                        if let Some(url) = NSURL::URLWithString(&ns_str) {
-                            if let Some(file_path_url) = url.filePathURL() {
-                                if let Some(path) = file_path_url.path() {
-                                    let p = path.to_string();
-                                    if !p.is_empty() {
-                                        paths.push(p);
-                                        continue;
-                                    }
-                                }
-                            }
-                            if let Some(path) = url.path() {
-                                let p = path.to_string();
-                                if !p.is_empty() {
-                                    paths.push(p);
-                                }
-                            }
-                        }
-                    }
-                }
-                if !paths.is_empty() {
-                    return paths;
-                }
-            }
-
-            vec![]
-        });
-        let _ = tx.send(result);
-    });
-
-    if dispatched.is_err() {
-        return vec![];
-    }
-
-    rx.recv_timeout(std::time::Duration::from_millis(200))
-        .unwrap_or_default()
 }
 
 /// Store a file clipboard entry
@@ -575,6 +330,7 @@ async fn upsert_entry(
 async fn store_file_entry(
     app_handle: &AppHandle,
     file_paths: Vec<String>,
+    source: AppInfo,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     let file_paths_json = serde_json::to_string(&file_paths).map_err(|e| e.to_string())?;
     // Human-readable text for search/display (the raw JSON lives in file_paths).
@@ -602,7 +358,6 @@ async fn store_file_entry(
         .map(|p| std::fs::metadata(p).map(|m| m.len() as i64).unwrap_or(0))
         .sum();
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
     // Upsert into database (atomic dedup on content_hash).
     let pool = get_pool(app_handle).await.map_err(String::from)?;
@@ -616,8 +371,8 @@ async fn store_file_entry(
         &hash,
         &preview,
         byte_size,
-        source_app.as_deref(),
-        source_app_name.as_deref(),
+        source.bundle_id.as_deref(),
+        source.name.as_deref(),
         &now,
     )
     .await
@@ -647,6 +402,7 @@ async fn store_text_entry(
     classifier: &ContentClassifier,
     text: String,
     html: Option<String>,
+    source: AppInfo,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
     // Hash the content for database dedup only
     let mut hasher = Sha256::new();
@@ -660,9 +416,6 @@ async fn store_text_entry(
     let byte_size = text.len() as i64;
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-    // Get the source app (frontmost app)
-    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
-
     // Upsert into database (atomic dedup on content_hash).
     let pool = get_pool(app_handle).await.map_err(String::from)?;
     let stored = upsert_entry(
@@ -675,8 +428,8 @@ async fn store_text_entry(
         &hash,
         &preview,
         byte_size,
-        source_app.as_deref(),
-        source_app_name.as_deref(),
+        source.bundle_id.as_deref(),
+        source.name.as_deref(),
         &now,
     )
     .await
@@ -699,12 +452,14 @@ async fn store_text_entry(
     }))
 }
 
-/// Store an image clipboard entry
+/// Store an image clipboard entry from a raw RGBA bitmap.
 async fn store_image_entry(
     app_handle: &AppHandle,
-    image_data: tauri::image::Image<'_>,
+    rgba_bytes: Vec<u8>,
+    width: u32,
+    height: u32,
+    source: AppInfo,
 ) -> Result<Option<ClipboardChangedPayload>, String> {
-    let rgba_bytes = image_data.rgba();
     if rgba_bytes.is_empty() {
         return Ok(None);
     }
@@ -721,8 +476,6 @@ async fn store_image_entry(
     let images_dir = app_data_dir.join("clipboard_images");
     let _ = std::fs::create_dir_all(&images_dir);
 
-    let width = image_data.width();
-    let height = image_data.height();
     // Use the full content hash for the filename so it matches the DB dedup key
     // and two distinct images can never collide on a 16-char prefix.
     let filename = format!("{}.png", hash);
@@ -736,8 +489,6 @@ async fn store_image_entry(
     let preview = format!("Image ({}×{})", width, height);
     let byte_size = std::fs::metadata(&file_path).map(|m| m.len() as i64).unwrap_or(rgba_bytes.len() as i64);
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-
-    let (source_app, source_app_name) = get_frontmost_app_async(app_handle).await;
 
     // Upsert into database (atomic dedup on content_hash). The PNG is already
     // written above; its filename is the content hash, so a dedup hit references
@@ -753,8 +504,8 @@ async fn store_image_entry(
         &hash,
         &preview,
         byte_size,
-        source_app.as_deref(),
-        source_app_name.as_deref(),
+        source.bundle_id.as_deref(),
+        source.name.as_deref(),
         &now,
     )
     .await
@@ -790,63 +541,6 @@ fn encode_rgba_to_png(rgba: &[u8], width: u32, height: u32, path: &std::path::Pa
     png_writer.write_image_data(rgba).map_err(|e| e.to_string())?;
     png_writer.finish().map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// Get the frontmost application info on macOS.
-/// Fully async — runs the blocking main-thread dispatch inside spawn_blocking
-/// with an outer tokio timeout, so the monitor loop is never blocked.
-async fn get_frontmost_app_async(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
-    #[cfg(target_os = "macos")]
-    {
-        let handle = app_handle.clone();
-        let result = tokio::time::timeout(
-            Duration::from_millis(300),
-            tokio::task::spawn_blocking(move || {
-                use std::sync::mpsc;
-                use objc2_app_kit::NSWorkspace;
-                use objc2::rc::autoreleasepool;
-
-                let (tx, rx) = mpsc::channel();
-                let dispatched = handle.run_on_main_thread(move || {
-                    let result = autoreleasepool(|_| {
-                        let workspace = NSWorkspace::sharedWorkspace();
-                        if let Some(app) = workspace.frontmostApplication() {
-                            let bundle_id = app
-                                .bundleIdentifier()
-                                .map(|s| s.to_string());
-                            let name = app
-                                .localizedName()
-                                .map(|s| s.to_string());
-                            (bundle_id, name)
-                        } else {
-                            (None, None)
-                        }
-                    });
-                    let _ = tx.send(result);
-                });
-
-                if dispatched.is_err() {
-                    return (None, None);
-                }
-
-                rx.recv_timeout(std::time::Duration::from_millis(200))
-                    .unwrap_or((None, None))
-            })
-        ).await;
-
-        match result {
-            Ok(Ok(v)) => v,
-            _ => {
-                log::warn!("[Clipboard] Timed out or failed getting frontmost app");
-                (None, None)
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        (None, None)
-    }
 }
 
 #[cfg(test)]

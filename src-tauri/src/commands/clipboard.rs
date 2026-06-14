@@ -7,6 +7,7 @@ use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::database::pool::get_pool;
 use crate::clipboard::native;
 use crate::clipboard::paste;
+use crate::platform::{ClipboardPort, PasterPort, WritePayload};
 
 #[tauri::command]
 #[specta::specta]
@@ -173,60 +174,57 @@ pub async fn rename_clipboard_entry(
     Ok(())
 }
 
-/// Paste an image entry by reading the saved PNG file and writing it to the pasteboard
+/// Paste an image entry by writing the saved PNG to the clipboard, then pasting.
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        native::write_png_to_pasteboard(&app_handle, &image_path)?;
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    let paster = app_handle.state::<PasterPort>().inner().clone();
 
-        // Hide and paste
-        app_handle.hide().map_err(|e| e.to_string())?;
-        native::wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
-        paste::paste_to_active_app(&app_handle, "", false)?;
-    }
+    clipboard.write(&WritePayload::ImageFile(image_path))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    Ok(())
+    // Hide and paste
+    app_handle.hide().map_err(|e| e.to_string())?;
+    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
+    paster.paste()
 }
 
 /// Copy an image entry to the clipboard without pasting
 #[tauri::command]
 #[specta::specta]
 pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        native::write_png_to_pasteboard(&app_handle, &image_path)?;
-    }
-
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::ImageFile(image_path))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
-    // 1. Write to clipboard
-    app_handle
-        .clipboard()
-        .write_text(&text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-    // Don't let the monitor re-capture our own write.
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    let paster = app_handle.state::<PasterPort>().inner().clone();
+
+    // 1. Write to clipboard, then stop the monitor re-capturing our own write.
+    clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // 2. Hide the entire application (returns focus to previous app)
+    // 2. Hide the app (returns focus to the previous app)
     app_handle.hide().map_err(|e| e.to_string())?;
 
-    // 3. Wait for macOS to complete the focus switch by actively reading the active app
-    native::wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
+    // 3. Wait for the focus switch to complete by reading the active app
+    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
 
-    // 4. Simulate Cmd+V
-    paste::paste_to_active_app(&app_handle, &text, false)
+    // 4. Synthesize the paste keystroke
+    paster.paste()
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), String> {
-    paste::copy_to_clipboard(&app_handle, &text)?;
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
     Ok(())
 }
@@ -234,18 +232,18 @@ pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), S
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), String> {
-    app_handle
-        .clipboard()
-        .write_text(&text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    let paster = app_handle.state::<PasterPort>().inner().clone();
+
+    clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     app_handle.hide().map_err(|e| e.to_string())?;
-    
-    // Wait for frontmost app switch
-    native::wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
 
-    paste::paste_to_active_app(&app_handle, &text, true)
+    // Wait for frontmost app switch
+    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
+
+    paster.paste()
 }
 
 #[tauri::command]
@@ -254,26 +252,16 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
 
-    // Write file URLs to the pasteboard using native API
-    #[cfg(target_os = "macos")]
-    {
-        native::write_files_to_pasteboard(&file_paths)?;
-    }
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    let paster = app_handle.state::<PasterPort>().inner().clone();
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        // Fallback: write file paths as text
-        app_handle
-            .clipboard()
-            .write_text(&file_paths.join("\n"))
-            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-    }
+    clipboard.write(&WritePayload::Files(file_paths))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     // Hide the app and paste
     app_handle.hide().map_err(|e| e.to_string())?;
-    native::wait_for_frontmost_app_switch("com.magpie.clipboard", &app_handle).await;
-    paste::paste_to_active_app(&app_handle, "", false)
+    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
+    paster.paste()
 }
 
 #[tauri::command]
@@ -282,11 +270,8 @@ pub fn copy_file_entry(app_handle: AppHandle, file_paths_json: String) -> Result
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
 
-    #[cfg(target_os = "macos")]
-    {
-        native::write_files_to_pasteboard(&file_paths)?;
-    }
-
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::Files(file_paths))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
     Ok(())
 }
@@ -334,7 +319,7 @@ pub async fn update_entry_content(
 #[tauri::command]
 #[specta::specta]
 pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), String> {
-    // Read current clipboard content
+    // Read current clipboard content (cross-platform via the clipboard plugin)
     let current = app_handle
         .clipboard()
         .read_text()
@@ -347,10 +332,8 @@ pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), St
         format!("{}\n{}", current, text)
     };
 
-    app_handle
-        .clipboard()
-        .write_text(&combined)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::Text(combined))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
     Ok(())
 }
@@ -374,6 +357,7 @@ pub async fn save_entry_as_file(
 
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = (&app_handle, &content, &default_name);
         Err("Save dialog not supported on this platform".to_string())
     }
 }
@@ -384,10 +368,8 @@ pub async fn save_entry_as_file(
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), String> {
-    app_handle
-        .clipboard()
-        .write_text(&text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     paste_to_previous_app_keeping_window(&app_handle).await
@@ -397,11 +379,9 @@ pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Resul
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_image_and_keep_window(app_handle: AppHandle, image_path: String) -> Result<(), String> {
-    // Write image to pasteboard
-    #[cfg(target_os = "macos")]
-    {
-        native::write_png_to_pasteboard(&app_handle, &image_path)?;
-    }
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::ImageFile(image_path))?;
+    crate::clipboard::monitor::mark_self_write(&app_handle);
 
     paste_to_previous_app_keeping_window(&app_handle).await
 }
@@ -413,19 +393,8 @@ pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: 
     let file_paths: Vec<String> = serde_json::from_str(&file_paths_json)
         .map_err(|e| format!("Failed to parse file paths: {}", e))?;
 
-    // Write file URLs to pasteboard
-    #[cfg(target_os = "macos")]
-    {
-        native::write_files_to_pasteboard(&file_paths)?;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        app_handle
-            .clipboard()
-            .write_text(&file_paths.join("\n"))
-            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-    }
+    let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
+    clipboard.write(&WritePayload::Files(file_paths))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
     paste_to_previous_app_keeping_window(&app_handle).await
@@ -437,6 +406,8 @@ pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: 
 /// re-focuses Magpie. The skip-blur flag is always cleared, even on error.
 async fn paste_to_previous_app_keeping_window(app_handle: &AppHandle) -> Result<(), String> {
     use std::sync::atomic::Ordering;
+
+    let paster = app_handle.state::<PasterPort>().inner().clone();
 
     let target_bundle_id = {
         let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
@@ -452,12 +423,12 @@ async fn paste_to_previous_app_keeping_window(app_handle: &AppHandle) -> Result<
     skip.0.store(true, Ordering::Relaxed);
 
     let result = async {
-        if !native::activate_app_by_bundle_id(app_handle, &target_bundle_id) {
+        if !paster.activate_app(&target_bundle_id) {
             return Err(format!("Could not activate target app: {}", target_bundle_id));
         }
         // Wait until the target app is genuinely frontmost before pasting.
-        native::wait_until_frontmost(&target_bundle_id, app_handle).await;
-        paste::paste_to_active_app(app_handle, "", false)?;
+        paste::wait_until_frontmost(&paster, &target_bundle_id).await;
+        paster.paste()?;
 
         // Let the paste land, then re-focus Magpie.
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;

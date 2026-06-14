@@ -1,128 +1,54 @@
-use tauri::AppHandle;
-use tauri_plugin_clipboard_manager::ClipboardExt;
+//! Paste-back orchestration. Platform-agnostic: the OS-specific bits (reading
+//! the frontmost app, synthesizing ⌘/Ctrl+V, activating an app) live behind the
+//! [`Paster`](crate::platform::Paster) port. This module just sequences them.
 
-/// Get the frontmost application info on macOS
-pub fn get_frontmost_app(app_handle: &AppHandle) -> (Option<String>, Option<String>) {
-    #[cfg(target_os = "macos")]
-    {
-        use std::sync::mpsc;
-        use objc2_app_kit::NSWorkspace;
-        use objc2::rc::autoreleasepool;
+use crate::platform::PasterPort;
 
-        let (tx, rx) = mpsc::channel();
+/// Magpie's own bundle identifier — used to tell "focus is still on Magpie"
+/// from "focus has moved to the target app".
+pub const MAGPIE_BUNDLE_ID: &str = "com.magpie.clipboard";
 
-        let dispatched = app_handle.run_on_main_thread(move || {
-            let result = autoreleasepool(|_| {
-                let workspace = NSWorkspace::sharedWorkspace();
-                if let Some(app) = workspace.frontmostApplication() {
-                    let bundle_id = app
-                        .bundleIdentifier()
-                        .map(|s| s.to_string());
-                    let name = app
-                        .localizedName()
-                        .map(|s| s.to_string());
-                    (bundle_id, name)
-                } else {
-                    (None, None)
-                }
-            });
-            let _ = tx.send(result);
-        });
-
-        if dispatched.is_err() {
-            return (None, None);
+/// Poll until `target_id` is the frontmost app (up to ~500ms), then add a short
+/// settle delay. Returns whether it became frontmost.
+pub async fn wait_until_frontmost(paster: &PasterPort, target_id: &str) -> bool {
+    for _ in 0..50 {
+        if let Some(id) = paster.frontmost_app().bundle_id {
+            if id == target_id {
+                tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                return true;
+            }
         }
-
-        // Bounded wait: never hang the caller if the main-thread closure
-        // doesn't run (e.g. main thread busy).
-        rx.recv_timeout(std::time::Duration::from_millis(200))
-            .unwrap_or((None, None))
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        (None, None)
-    }
+    log::warn!("Target app {} never became frontmost before paste", target_id);
+    false
 }
 
-/// Paste content to the active application by writing to clipboard
-/// and simulating Cmd+V keystroke
-#[allow(unused_variables)]
-pub fn paste_to_active_app(app_handle: &AppHandle, _text: &str, _plain_text_only: bool) -> Result<(), String> {
-    // Content is already written to clipboard by the caller
-
-    // Simulate Cmd+V using CGEvent on macOS
-    #[cfg(target_os = "macos")]
-    {
-        // CGEvent key synthesis is silently discarded by macOS unless the app
-        // has Accessibility access. Detect that up front so the paste fails
-        // loudly (with a notification) instead of pretending to succeed — the
-        // content is already on the clipboard, so the user can paste manually.
-        if !crate::check_accessibility_permission() {
-            use tauri_plugin_notification::NotificationExt;
-            let _ = app_handle
-                .notification()
-                .builder()
-                .title("Magpie 无法自动粘贴")
-                .body("内容已复制到剪贴板。请在「系统设置 → 隐私与安全性 → 辅助功能」中开启 Magpie 以启用自动粘贴。")
-                .show();
-            return Err("缺少辅助功能权限，无法模拟粘贴".to_string());
+/// Poll until the frontmost application is NOT `ignore_id`, then add a short
+/// settle delay so the newly-focused app is ready to receive the synthesized
+/// ⌘/Ctrl+V. Returns whether the focus actually switched.
+pub async fn wait_for_frontmost_app_switch(paster: &PasterPort, ignore_id: &str) -> bool {
+    let mut switched = false;
+    for _ in 0..50 {
+        // max ~500ms
+        if let Some(id) = paster.frontmost_app().bundle_id {
+            if id != ignore_id {
+                log::debug!("Active app switched to: {}", id);
+                switched = true;
+                break;
+            }
         }
-
-        simulate_paste_keystroke();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
-    Ok(())
-}
+    if switched {
+        // Give the now-frontmost app a moment to become first responder before
+        // we synthesize the paste keystroke — without this the ⌘/Ctrl+V can race
+        // the focus change and be dropped or land in Magpie.
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    } else {
+        log::warn!("Frontmost app never switched away from {} before paste", ignore_id);
+    }
 
-/// Copy content to clipboard without pasting
-pub fn copy_to_clipboard(app_handle: &AppHandle, text: &str) -> Result<(), String> {
-    app_handle
-        .clipboard()
-        .write_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))
-}
-
-/// Simulate Cmd+V keystroke on macOS using CGEvent API.
-/// This is more reliable than osascript and doesn't require
-/// separate System Events permission — only Accessibility access.
-#[cfg(target_os = "macos")]
-fn simulate_paste_keystroke() {
-    use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-
-    // Key code 9 = 'V' on macOS
-    const V_KEY: CGKeyCode = 9;
-
-    let source = match CGEventSource::new(CGEventSourceStateID::HIDSystemState) {
-        Ok(s) => s,
-        Err(_) => {
-            log::error!("[Paste] Failed to create CGEventSource");
-            return;
-        }
-    };
-
-    // Key down
-    let key_down = match CGEvent::new_keyboard_event(source.clone(), V_KEY, true) {
-        Ok(e) => e,
-        Err(_) => {
-            log::error!("[Paste] Failed to create key down event");
-            return;
-        }
-    };
-    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_down.post(core_graphics::event::CGEventTapLocation::HID);
-
-    // Key up
-    let key_up = match CGEvent::new_keyboard_event(source, V_KEY, false) {
-        Ok(e) => e,
-        Err(_) => {
-            log::error!("[Paste] Failed to create key up event");
-            return;
-        }
-    };
-    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_up.post(core_graphics::event::CGEventTapLocation::HID);
-
-    log::debug!("[Paste] Simulated Cmd+V via CGEvent");
+    switched
 }

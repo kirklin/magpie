@@ -10,7 +10,7 @@ export const commands = {
 	togglePinEntry: (id: number) => typedError<boolean, string>(__TAURI_INVOKE("toggle_pin_entry", { id })),
 	renameClipboardEntry: (id: number, name: string) => typedError<null, string>(__TAURI_INVOKE("rename_clipboard_entry", { id, name })),
 	pasteClipboardEntry: (text: string) => typedError<null, string>(__TAURI_INVOKE("paste_clipboard_entry", { text })),
-	/**  Paste an image entry by reading the saved PNG file and writing it to the pasteboard */
+	/**  Paste an image entry by writing the saved PNG to the clipboard, then pasting. */
 	pasteImageEntry: (imagePath: string) => typedError<null, string>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
 	/**  Copy an image entry to the clipboard without pasting */
 	copyImageEntry: (imagePath: string) => typedError<null, string>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
