@@ -336,11 +336,10 @@ async fn store_file_entry(
     // Human-readable text for search/display (the raw JSON lives in file_paths).
     let file_paths_text = file_paths.join("\n");
 
-    // Hash the file paths for database dedup only
-    let mut hasher = Sha256::new();
-    hasher.update(file_paths_json.as_bytes());
-    let result = hasher.finalize();
-    let hash: String = result.iter().map(|b| format!("{:02x}", b)).collect();
+    // Dedup key derived from file CONTENT (with size + mtime), not just the path.
+    // Hashing only the path wrongly deduped a file that had been edited in place
+    // and re-copied; folding in size/mtime/bytes makes an edited file read as new.
+    let hash = hash_file_contents(&file_paths);
 
     // Generate preview from file names
     let preview = if file_paths.len() == 1 {
@@ -528,6 +527,55 @@ async fn store_image_entry(
     }))
 }
 
+/// Compute a dedup hash for a file selection from each file's path, size, mtime
+/// and content. Files up to `FULL_HASH_LIMIT` are hashed whole; larger files are
+/// sampled (head + tail) so copying a huge file never reads gigabytes — size and
+/// mtime still distinguish edits. Missing/unreadable files fall back to the path
+/// contribution, so this never fails.
+fn hash_file_contents(paths: &[String]) -> String {
+    use std::io::{Read, Seek, SeekFrom};
+
+    const FULL_HASH_LIMIT: u64 = 8 * 1024 * 1024; // hash whole file up to 8 MiB
+    const SAMPLE: usize = 64 * 1024; // else hash head + tail of this size
+
+    let mut hasher = Sha256::new();
+    for p in paths {
+        hasher.update(p.as_bytes());
+        hasher.update([0u8]); // path separator so concatenations can't collide
+
+        let Ok(meta) = std::fs::metadata(p) else {
+            continue; // missing/unreadable: path alone already folded in
+        };
+        let size = meta.len();
+        hasher.update(size.to_le_bytes());
+        if let Ok(mtime) = meta.modified() {
+            if let Ok(d) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                hasher.update(d.as_nanos().to_le_bytes());
+            }
+        }
+
+        if !meta.is_file() {
+            continue; // directories: path + size + mtime are enough
+        }
+        if size <= FULL_HASH_LIMIT {
+            if let Ok(bytes) = std::fs::read(p) {
+                hasher.update(&bytes);
+            }
+        } else if let Ok(mut f) = std::fs::File::open(p) {
+            let mut buf = vec![0u8; SAMPLE];
+            if let Ok(n) = f.read(&mut buf) {
+                hasher.update(&buf[..n]);
+            }
+            if f.seek(SeekFrom::End(-(SAMPLE as i64))).is_ok() {
+                if let Ok(n) = f.read(&mut buf) {
+                    hasher.update(&buf[..n]);
+                }
+            }
+        }
+    }
+    hex::encode(hasher.finalize())
+}
+
 /// Encode RGBA bytes into a (properly compressed) PNG file using the `png` crate.
 fn encode_rgba_to_png(rgba: &[u8], width: u32, height: u32, path: &std::path::Path) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
@@ -592,5 +640,25 @@ mod tests {
         let (cnt,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard_entries")
             .fetch_one(&pool).await.unwrap();
         assert_eq!(cnt, 1, "still a single row");
+    }
+
+    #[test]
+    fn file_hash_tracks_content_not_just_path() {
+        let dir = std::env::temp_dir().join(format!("magpie_filehash_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.txt");
+        std::fs::write(&file, b"original contents").unwrap();
+        let paths = vec![file.to_string_lossy().to_string()];
+
+        let h1 = hash_file_contents(&paths);
+        // Same path + unchanged content/metadata hashes identically (dedup works).
+        assert_eq!(h1, hash_file_contents(&paths), "unchanged file hashes the same");
+
+        // Editing the file in place (same path) must change the hash — the old
+        // bug deduped this against the stale version.
+        std::fs::write(&file, b"different contents after an edit").unwrap();
+        assert_ne!(h1, hash_file_contents(&paths), "edited file must hash differently");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

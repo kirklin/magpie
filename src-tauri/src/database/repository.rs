@@ -115,6 +115,17 @@ pub fn get_migrations() -> Vec<Migration> {
                 ON clipboard_entries(content_hash);",
             kind: MigrationKind::Up,
         },
+        // Drop the snippet tables created in v2 but never wired to any feature.
+        // Safe: no code ever inserts into them, so they are empty. Children
+        // first (snippets FKs snippet_folders), then the parent. DROP TABLE also
+        // removes the tables' indexes.
+        Migration {
+            version: 4,
+            description: "drop unused snippet tables",
+            sql: "DROP TABLE IF EXISTS snippets;
+                  DROP TABLE IF EXISTS snippet_folders;",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -191,6 +202,26 @@ mod tests {
              VALUES ('text','other','2026-01-03 00:00:00','2026-01-03 00:00:00')",
         ).execute(&pool).await;
         assert!(dup.is_err(), "UNIQUE(content_hash) must reject a duplicate insert");
+    }
+
+    #[tokio::test]
+    async fn v4_drops_unused_snippet_tables() {
+        let pool = mem_pool_with_v1().await;
+        sqlx::raw_sql(migration_sql(2)).execute(&pool).await.unwrap();
+
+        let (before,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' \
+             AND name IN ('snippets','snippet_folders')",
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(before, 2, "snippet tables exist after v2");
+
+        sqlx::raw_sql(migration_sql(4)).execute(&pool).await.expect("v4 runs");
+
+        let (after,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' \
+             AND name IN ('snippets','snippet_folders')",
+        ).fetch_one(&pool).await.unwrap();
+        assert_eq!(after, 0, "v4 drops both snippet tables");
     }
 
     #[tokio::test]
