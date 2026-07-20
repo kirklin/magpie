@@ -112,3 +112,8 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+
+    # The Homebrew cask is bumped by a self-updating workflow that lives in the
+    # tap repo (kirklin/homebrew-tap → .github/workflows/update-magpie.yml), so
+    # no cross-repo token is needed here. Trigger it after releasing, or let its
+    # schedule pick the new release up automatically.
