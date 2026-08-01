@@ -1,18 +1,5 @@
-import type { StringKey } from "../i18n";
-import {
-  ClipboardPaste,
-  Copy,
-  Eraser,
-  ExternalLink,
-  FileDown,
-  ListPlus,
-  Pencil,
-  Pin,
-  PinOff,
-  Trash2,
-  Type,
-} from "lucide-react";
-import { forwardRef, useEffect, useRef, useState } from "react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
 
 // --- ActionButton Component ---
@@ -39,50 +26,48 @@ interface ActionPanelProps {
   groups: ActionGroup[];
 }
 
-const ActionButton = forwardRef<
-  HTMLButtonElement,
-  {
-    action: Action;
-    isSelected: boolean;
-    onSelect: () => void;
-    onClick: () => void;
-  }
->(({ action, isSelected, onSelect, onClick }, ref) => (
-  <button
-    ref={ref}
-    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors ${
-      isSelected
-        ? "bg-bg-hover"
-        : "hover:bg-bg-hover/50"
-    } ${action.danger ? "text-red-400" : "text-text-primary"}`}
-    onClick={onClick}
-    onMouseEnter={onSelect}
-  >
-    <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded ${
-      isSelected
-        ? action.danger ? "text-red-400" : "text-text-primary"
-        : "text-text-secondary"
-    }`}
+function ActionButton({ action, isSelected, onSelect, onClick, ref }: {
+  action: Action;
+  isSelected: boolean;
+  onSelect: () => void;
+  onClick: () => void;
+  ref?: React.Ref<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      ref={ref}
+      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors ${
+        isSelected
+          ? "bg-bg-hover"
+          : "hover:bg-bg-hover/50"
+      } ${action.danger ? "text-red-400" : "text-text-primary"}`}
+      onClick={onClick}
+      onMouseEnter={onSelect}
     >
-      {action.icon}
-    </span>
-    <span className="flex-1 text-[13px] font-medium">{action.label}</span>
-    {action.shortcut && (
-      <div className="flex items-center gap-1 opacity-60">
-        {action.shortcut.map((key, i) => (
-          <kbd
-            key={i}
-            className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-bg-hover rounded border border-border font-sans shadow-sm"
-          >
-            {key}
-          </kbd>
-        ))}
-      </div>
-    )}
-  </button>
-));
-
-ActionButton.displayName = "ActionButton";
+      <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded ${
+        isSelected
+          ? action.danger ? "text-red-400" : "text-text-primary"
+          : "text-text-secondary"
+      }`}
+      >
+        {action.icon}
+      </span>
+      <span className="flex-1 text-[13px] font-medium">{action.label}</span>
+      {action.shortcut && (
+        <div className="flex items-center gap-1 opacity-60">
+          {action.shortcut.map(sym => (
+            <kbd
+              key={sym}
+              className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-bg-hover rounded border border-border font-sans shadow-sm"
+            >
+              {sym}
+            </kbd>
+          ))}
+        </div>
+      )}
+    </button>
+  );
+}
 
 // --- ActionPanel Component ---
 
@@ -92,7 +77,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const itemElementsRef = useRef<Map<number, HTMLButtonElement>>(new Map());
 
   // Flatten filtered actions for keyboard navigation
   const allActions = groups.flatMap(g => g.actions);
@@ -100,20 +85,32 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
     a.label.toLowerCase().includes(search.toLowerCase()),
   );
 
-  // Reset state when opened
-  useEffect(() => {
+  // Reset the query and cursor when the panel opens. Derived during render so
+  // the first painted frame is already clean, rather than briefly showing the
+  // previous session's search text.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
       setSearch("");
       setSelectedIndex(0);
-      itemRefs.current.clear();
-      requestAnimationFrame(() => inputRef.current?.focus());
     }
+  }
+
+  // DOM-touching side effects stay in an effect.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    itemElementsRef.current.clear();
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [isOpen]);
 
   // Scroll selected item into view
   useEffect(() => {
     if (isOpen && filtered.length > 0) {
-      const el = itemRefs.current.get(selectedIndex);
+      const el = itemElementsRef.current.get(selectedIndex);
       el?.scrollIntoView({ block: "nearest" });
     }
   }, [selectedIndex, isOpen, filtered.length]);
@@ -221,7 +218,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                       }}
                       ref={(el) => {
                         if (el) {
-                          itemRefs.current.set(index, el);
+                          itemElementsRef.current.set(index, el);
                         }
                       }}
                     />
@@ -238,7 +235,11 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                     }
 
                     return (
-                      <div key={group.label ?? groupIdx}>
+                      // Groups may be unlabelled, so fall back to the id of the
+                      // first surviving action — guaranteed present by the
+                      // emptiness check above, and stable across re-renders in a
+                      // way the array index is not.
+                      <div key={group.label ?? groupActions[0].id}>
                         {/* Separator between groups (not before first) */}
                         {groupIdx > 0 && (
                           <div className="h-[1px] bg-border mx-1.5 my-1" />
@@ -257,7 +258,7 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
                               }}
                               ref={(el) => {
                                 if (el) {
-                                  itemRefs.current.set(currentIndex, el);
+                                  itemElementsRef.current.set(currentIndex, el);
                                 }
                               }}
                             />
@@ -271,168 +272,4 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
       </div>
     </>
   );
-}
-
-// --- Action Builder ---
-
-export interface BuildActionsConfig {
-  /** Whether an entry is selected */
-  hasEntry: boolean;
-  /** The selected entry (null if none) */
-  entry: {
-    content_type: string;
-    text_content: string | null;
-    is_pinned: boolean;
-  } | null;
-  /** Name of the active app to paste to */
-  activeApp: string;
-  /** Translator (from useT) for action labels */
-  t: (key: StringKey, params?: Record<string, string | number>) => string;
-  /** Callbacks */
-  onPaste: () => void;
-  onCopy: () => void;
-  onPastePlainText: () => void;
-  onPasteKeepWindow: () => void;
-  onOpenUrl: () => void;
-  onAppendToClipboard: () => void;
-  onEditContent: () => void;
-  onTogglePin: () => void;
-  onSaveAsFile: () => void;
-  onDelete: () => void;
-  onClearHistory: () => void;
-}
-
-/**
- * Builds the action groups for the clipboard action panel.
- * Groups are: Paste, Manage, Danger.
- * Context-aware: shows "Open in Browser" only for URL entries.
- */
-export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGroup[] {
-  const { t } = config;
-  const groups: ActionGroup[] = [];
-
-  if (config.hasEntry && config.entry) {
-    const isUrl = config.entry.content_type === "url";
-    const isText = config.entry.text_content !== null;
-    const isPinned = config.entry.is_pinned;
-
-    // --- Group 1: Paste operations ---
-    const pasteActions: Action[] = [
-      {
-        id: "paste",
-        label: t("action.paste_to", { app: config.activeApp }),
-        icon: <img src="/logo.png" alt="Magpie" className="w-[14px] h-[14px] object-contain rounded-[3px]" />,
-        shortcut: ["↵"],
-        onAction: config.onPaste,
-      },
-      {
-        id: "copy",
-        label: t("action.copy"),
-        icon: <Copy size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "↵"],
-        onAction: config.onCopy,
-      },
-    ];
-
-    if (isText) {
-      pasteActions.push({
-        id: "paste-plain",
-        label: t("action.paste_plain"),
-        icon: <Type size={14} className="text-text-secondary" />,
-        shortcut: ["⇧", "↵"],
-        onAction: config.onPastePlainText,
-      });
-    }
-
-    pasteActions.push({
-      id: "paste-keep-window",
-      label: t("action.paste_keep"),
-      icon: <ClipboardPaste size={14} className="text-text-secondary" />,
-      shortcut: ["⌥", "↵"],
-      onAction: config.onPasteKeepWindow,
-    });
-
-    groups.push({ actions: pasteActions });
-
-    // --- Group 2: Management ---
-    const manageActions: Action[] = [];
-
-    if (isUrl) {
-      manageActions.push({
-        id: "open-url",
-        label: t("action.open_browser"),
-        icon: <ExternalLink size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "O"],
-        onAction: config.onOpenUrl,
-      });
-    }
-
-    if (isText) {
-      manageActions.push({
-        id: "append",
-        label: t("action.append"),
-        icon: <ListPlus size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "⌥", "C"],
-        onAction: config.onAppendToClipboard,
-      });
-    }
-
-    if (isText) {
-      manageActions.push({
-        id: "edit-content",
-        label: t("action.edit"),
-        icon: <Pencil size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "E"],
-        onAction: config.onEditContent,
-      });
-    }
-
-    manageActions.push({
-      id: "pin",
-      label: isPinned ? t("action.unpin") : t("action.pin"),
-      icon: isPinned ? <PinOff size={14} className="text-text-secondary" /> : <Pin size={14} className="text-text-secondary" />,
-      shortcut: ["⌘", "."],
-      onAction: config.onTogglePin,
-    });
-
-    manageActions.push({
-      id: "save-as-file",
-      label: t("action.save_file"),
-      icon: <FileDown size={14} className="text-text-secondary" />,
-      shortcut: ["⌘", "S"],
-      onAction: config.onSaveAsFile,
-    });
-
-    groups.push({ actions: manageActions });
-
-    // --- Group 3: Danger zone ---
-    groups.push({
-      actions: [
-        {
-          id: "delete",
-          label: t("action.delete"),
-          icon: <Trash2 size={14} />,
-          shortcut: ["⌘", "⌫"],
-          danger: true,
-          onAction: config.onDelete,
-        },
-      ],
-    });
-  }
-
-  // Always show clear history
-  groups.push({
-    actions: [
-      {
-        id: "clear",
-        label: t("action.clear_all"),
-        icon: <Eraser size={14} />,
-        shortcut: ["⇧", "⌘", "⌫"],
-        danger: true,
-        onAction: config.onClearHistory,
-      },
-    ],
-  });
-
-  return groups;
 }

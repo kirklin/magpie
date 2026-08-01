@@ -17,20 +17,33 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
   const [content, setContent] = useState(initialContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync content when modal opens with new initialContent
+  // Seed the draft from initialContent whenever the modal opens. Done during
+  // render instead of in an effect so the textarea never paints the previous
+  // entry's text for a frame before being corrected.
+  const [openedWith, setOpenedWith] = useState<string | null>(isOpen ? initialContent : null);
+  if (isOpen && openedWith !== initialContent) {
+    setOpenedWith(initialContent);
+    setContent(initialContent);
+  } else if (!isOpen && openedWith !== null) {
+    setOpenedWith(null);
+  }
+
+  // Focus and place the caret at the end once the textarea is on screen. This
+  // touches the DOM, so it genuinely belongs in an effect.
   useEffect(() => {
-    if (isOpen) {
-      setContent(initialContent);
-      requestAnimationFrame(() => {
-        const el = textareaRef.current;
-        if (el) {
-          el.focus();
-          // Place cursor at end
-          el.selectionStart = el.selectionEnd = el.value.length;
-        }
-      });
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen, initialContent]);
+    const frame = requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        // Place cursor at end
+        el.selectionStart = el.selectionEnd = el.value.length;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
 
   const handleSave = useCallback(() => {
     onSave(content);

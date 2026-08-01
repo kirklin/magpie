@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface ShortcutRecorderProps {
@@ -173,9 +173,12 @@ function RecordingPopover({
   onClose: () => void;
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
 
-  useLayoutEffect(() => {
+  // Pure geometry off the anchor — the popover's own size is fixed, so nothing
+  // here needs to measure the DOM. Computing it during render instead of in a
+  // layout effect also removes the first frame at {0,0} before it jumped into
+  // place.
+  const pos = useMemo(() => {
     // Position above the anchor, right-aligned
     const popoverW = 220;
     const popoverH = 80;
@@ -192,7 +195,7 @@ function RecordingPopover({
       left = 4;
     }
 
-    setPos({ top, left });
+    return { top, left };
   }, [anchorRect]);
 
   return createPortal(
@@ -334,8 +337,8 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
         }`}
         onClick={openRecording}
       >
-        {displayParts.map((sym, i) => (
-          <KeyCap key={i}>{sym}</KeyCap>
+        {displayParts.map(sym => (
+          <KeyCap key={sym}>{sym}</KeyCap>
         ))}
       </button>
 

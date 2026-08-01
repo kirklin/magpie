@@ -1,7 +1,7 @@
 import kirklin from "@kirklin/eslint-config";
 
 export default kirklin({
-  react: false,
+  react: true,
   typescript: true,
   formatters: true,
   nextjs: false,

@@ -53,27 +53,32 @@ function resolveThumb(imagePath: string): Promise<string> {
  * thumbnail beats a broken image.
  */
 export function useThumbnail(imagePath: string | null | undefined): string | null {
-  // Initialise from cache so a re-mounted row paints synchronously.
-  const [src, setSrc] = useState<string | null>(() =>
-    imagePath ? thumbCache.get(imagePath) ?? null : null,
-  );
+  const key = imagePath || null;
+
+  // Derived during render rather than in an effect. A cache hit has to paint on
+  // the very first render — routing it through an effect would show one blank
+  // frame per row and cost an extra commit, which is exactly the jank this hook
+  // exists to avoid on a fast scroll. This is React's documented
+  // "adjust state when a prop changes" pattern: the extra render is discarded
+  // before the browser paints.
+  const [resolved, setResolved] = useState<{ key: string | null; src: string | null }>(() => ({
+    key,
+    src: key ? thumbCache.get(key) ?? null : null,
+  }));
+  if (resolved.key !== key) {
+    setResolved({ key, src: key ? thumbCache.get(key) ?? null : null });
+  }
 
   useEffect(() => {
-    if (!imagePath) {
-      setSrc(null);
-      return;
-    }
-    const cached = thumbCache.get(imagePath);
-    if (cached) {
-      setSrc(cached);
+    // Nothing to do when there's no image, or the cache already answered above.
+    if (!key || thumbCache.has(key)) {
       return;
     }
     let cancelled = false;
-    setSrc(null);
-    resolveThumb(imagePath)
+    resolveThumb(key)
       .then((url) => {
         if (!cancelled) {
-          setSrc(url);
+          setResolved({ key, src: url });
         }
       })
       .catch(() => {
@@ -81,13 +86,13 @@ export function useThumbnail(imagePath: string | null | undefined): string | nul
         // so the row isn't blank; this path is rare enough that its decode cost
         // doesn't undo the win.
         if (!cancelled) {
-          setSrc(convertFileSrc(imagePath));
+          setResolved({ key, src: convertFileSrc(key) });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [imagePath]);
+  }, [key]);
 
-  return src;
+  return resolved.src;
 }

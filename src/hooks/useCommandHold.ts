@@ -20,6 +20,9 @@ export function useCommandHold(delay = 300): boolean {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only trigger on bare Meta key (no other keys pressed simultaneously)
       if (e.key === "Meta" && !timerRef.current && !isHolding) {
+        // The cleanup below calls clear(), which clearTimeout()s this handle —
+        // the rule just can't follow it through the indirection.
+        // eslint-disable-next-line react/web-api-no-leaked-timeout
         timerRef.current = setTimeout(() => {
           setIsHolding(true);
           timerRef.current = null;

@@ -6,19 +6,21 @@ import { listen } from "@tauri-apps/api/event";
 import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { ActionPanel, buildClipboardActionGroups } from "../components/ActionPanel";
+import { ActionPanel } from "../components/ActionPanel";
+import { buildClipboardActionGroups } from "../components/clipboardActions";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EditContentModal } from "../components/EditContentModal";
 import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
-import { ToastContainer, useToastStore } from "../components/Toast";
+import { ToastContainer } from "../components/Toast";
 import { useCommandHold } from "../hooks/useCommandHold";
 import { useLocale, useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
+import { useToastStore } from "../stores/toast";
 import { groupByDate } from "../utils/grouping";
 
 export function ClipboardHistory() {
@@ -62,7 +64,7 @@ export function ClipboardHistory() {
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const isComposingRef = useRef(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const visibleRange = useRef({ startIndex: 0, endIndex: 0 });
+  const visibleRangeRef = useRef({ startIndex: 0, endIndex: 0 });
   const searchBarRef = useRef<SearchBarRef>(null);
 
   // Command-hold quick-paste feature
@@ -106,7 +108,7 @@ export function ClipboardHistory() {
     if (!isComposingRef.current) {
       fetchEntries();
     }
-  }, [deferredSearch]);
+  }, [deferredSearch, fetchEntries]);
 
   // Listen for clipboard changes from Rust
   useEffect(() => {
@@ -161,7 +163,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast]);
+  }, [selectedEntry, copyEntry, copyFileEntry, copyImageEntry, toast, t]);
 
   const handlePastePlainText = useCallback(async () => {
     if (!selectedEntry?.text_content) {
@@ -192,7 +194,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast]);
+  }, [selectedEntry, pasteAndKeepWindow, pasteImageAndKeepWindow, pasteFileAndKeepWindow, toast, t]);
 
   const handleOpenUrl = useCallback(() => {
     if (!selectedEntry?.text_content) {
@@ -211,7 +213,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedEntry, appendToClipboard, toast]);
+  }, [selectedEntry, appendToClipboard, toast, t]);
 
   const handleEditContent = useCallback(() => {
     if (!selectedEntry?.text_content) {
@@ -230,7 +232,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedId, updateEntryContent, toast]);
+  }, [selectedId, updateEntryContent, toast, t]);
 
   const handleTogglePin = useCallback(async () => {
     if (!selectedId) {
@@ -243,7 +245,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedId, selectedEntry, togglePin, toast]);
+  }, [selectedId, selectedEntry, togglePin, toast, t]);
 
   const handleSaveAsFile = useCallback(() => {
     if (!selectedEntry) {
@@ -273,7 +275,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedId, deleteEntry, toast]);
+  }, [selectedId, deleteEntry, toast, t]);
 
   const handleClearHistory = useCallback(() => {
     setIsConfirmClearOpen(true);
@@ -287,7 +289,7 @@ export function ClipboardHistory() {
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [clearHistory, toast]);
+  }, [clearHistory, toast, t]);
 
   // --- Keyboard navigation ---
 
@@ -502,7 +504,7 @@ export function ClipboardHistory() {
     if (rowIndex < 0) {
       return;
     }
-    const { startIndex, endIndex } = visibleRange.current;
+    const { startIndex, endIndex } = visibleRangeRef.current;
     // Small margin so the selected row lands fully in view at the edge without
     // being cut, but not so large that a whole extra row shows past it (which
     // makes the selected row look like the second-to-last).
@@ -512,7 +514,11 @@ export function ClipboardHistory() {
     } else if (rowIndex >= endIndex) {
       virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "end", offset: SCROLL_MARGIN });
     }
-    // Deps are deliberately narrowed to selectedId — see above.
+    // `rows` is read but deliberately NOT a dependency: it changes every time a
+    // page is appended or an entry is captured, and re-running this then would
+    // scroll the list out from under the user. Keying on selectedId alone means
+    // we only scroll in response to an actual selection change.
+    // eslint-disable-next-line react/exhaustive-deps
   }, [selectedId]);
 
   // Build grouped actions for the action panel
@@ -592,7 +598,7 @@ export function ClipboardHistory() {
                   data={rows}
                   endReached={() => loadMore()}
                   rangeChanged={(range) => {
-                    visibleRange.current = range;
+                    visibleRangeRef.current = range;
                   }}
                   computeItemKey={(_, row) =>
                     row.kind === "header" ? `h:${row.label}` : `i:${row.entry.id}`}

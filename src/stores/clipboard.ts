@@ -5,9 +5,9 @@
 import type { ClipboardEntry, ClipboardQuery } from "../bindings";
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { useToastStore } from "../components/Toast";
-
 import { parseAppError } from "../lib/error";
+
+import { useToastStore } from "./toast";
 
 export type { ClipboardEntry, ClipboardQuery };
 

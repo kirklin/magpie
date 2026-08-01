@@ -8,12 +8,12 @@ import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
 import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { ThemePicker } from "../components/settings/ThemePicker";
-import { useToastStore } from "../components/Toast";
 import { useT } from "../i18n";
 import { parseAppError } from "../lib/error";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useSettingsStore } from "../stores/settings";
+import { useToastStore } from "../stores/toast";
 
 export function SettingsView() {
   const { navigateTo } = useNavigationStore();

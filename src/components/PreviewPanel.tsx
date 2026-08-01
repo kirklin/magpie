@@ -3,7 +3,7 @@ import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { Pin } from "lucide-react";
 import Prism from "prismjs";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { t, useLocale, useT } from "../i18n";
 import { getTypeLabel } from "../utils/classifier";
 import "prismjs/themes/prism-tomorrow.css";
@@ -82,26 +82,32 @@ function FilePreview({ filePath }: { filePath: string }) {
   const [textContent, setTextContent] = useState<string | null>(null);
 
   useEffect(() => {
-    if (category === "text") {
-      let cancelled = false;
-      fetch(src)
-        .then(res => res.text())
-        .then((text) => {
-          if (!cancelled) {
-            // Limit preview to ~10000 characters to avoid performance issues
-            setTextContent(text.length > 10000 ? `${text.substring(0, 10000)}\n\n${t("preview.truncated")}` : text);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setTextContent(t("preview.load_failed"));
-          }
-        });
-      return () => {
-        cancelled = true;
-      };
+    if (category !== "text") {
+      return;
     }
-  }, [category, src]);
+    // Abort rather than just ignoring a late response: selecting through a list
+    // of files would otherwise leave a read in flight for every row passed over.
+    const controller = new AbortController();
+    fetch(src, { signal: controller.signal })
+      .then(res => res.text())
+      .then((text) => {
+        // Limit preview to ~10000 characters to avoid performance issues
+        setTextContent(text.length > 10000 ? `${text.substring(0, 10000)}\n\n${t("preview.truncated")}` : text);
+      })
+      .catch((err) => {
+        // An abort is us tearing down, not a failed read — leave the state alone
+        // so the outgoing preview doesn't flash an error on its way out.
+        if (err?.name !== "AbortError") {
+          setTextContent(t("preview.load_failed"));
+        }
+      });
+    return () => controller.abort();
+  }, [category, src, t]);
+
+  // Cache-busting token for the PDF iframe, recomputed only when the file
+  // changes. Calling Date.now() inline in the JSX gave the iframe a new src on
+  // EVERY render, so the PDF reloaded from scratch each time.
+  const pdfSrc = useMemo(() => `${src}?t=${Date.now()}`, [src]);
 
   switch (category) {
     case "image":
@@ -134,7 +140,7 @@ function FilePreview({ filePath }: { filePath: string }) {
       return (
         <iframe
           key={src}
-          src={`${src}?t=${Date.now()}`}
+          src={pdfSrc}
           className="w-full h-full rounded-lg border-0 bg-white"
           title={t("preview.pdf_title")}
         />
@@ -194,16 +200,22 @@ const fileIconCache = new Map<string, string>();
 
 // Async component to load native file icon from macOS
 export function NativeFileIcon({ filePath, className = "w-16 h-16" }: { filePath: string; className?: string }) {
-  // Initialise from cache so a re-mounted row paints its icon synchronously.
-  const [iconSrc, setIconSrc] = useState<string | null>(() => fileIconCache.get(filePath) ?? null);
+  // Resolved during render, not in an effect, so a re-mounted row paints its
+  // icon on the first frame instead of flashing the placeholder. React's
+  // "adjust state when a prop changes" pattern — the extra render is discarded
+  // before paint.
+  const [resolved, setResolved] = useState<{ path: string; src: string | null }>(() => ({
+    path: filePath,
+    src: fileIconCache.get(filePath) ?? null,
+  }));
+  if (resolved.path !== filePath) {
+    setResolved({ path: filePath, src: fileIconCache.get(filePath) ?? null });
+  }
+  const iconSrc = resolved.src;
 
   useEffect(() => {
-    if (!filePath) {
-      return;
-    }
-    const cached = fileIconCache.get(filePath);
-    if (cached) {
-      setIconSrc(cached);
+    // Nothing to fetch when there's no path, or the cache already answered.
+    if (!filePath || fileIconCache.has(filePath)) {
       return;
     }
     let cancelled = false;
@@ -215,7 +227,7 @@ export function NativeFileIcon({ filePath, className = "w-16 h-16" }: { filePath
         }
         fileIconCache.set(filePath, base64);
         if (!cancelled) {
-          setIconSrc(base64);
+          setResolved({ path: filePath, src: base64 });
         }
       })
       .catch(() => {
@@ -366,11 +378,11 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                       : (
                         /* Multiple files: show list with native icons */
                           <div className="space-y-2">
-                            {filePaths.map((filePath, i) => {
+                            {filePaths.map((filePath) => {
                               const fileName = filePath.split("/").pop() || filePath;
                               const dirPath = filePath.substring(0, filePath.length - fileName.length);
                               return (
-                                <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-secondary">
+                                <div key={filePath} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-secondary">
                                   <NativeFileIcon filePath={filePath} className="w-8 h-8 mt-0.5 shrink-0" />
                                   <div className="min-w-0 flex-1 self-center">
                                     <div className="text-[13px] text-text-primary font-medium truncate">{fileName}</div>
@@ -466,6 +478,12 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                             <pre className="flex-1 overflow-auto bg-bg-secondary rounded-lg p-3 border border-border text-[13px] font-mono leading-[1.6] select-text cursor-text !m-0">
                               <code
                                 className="language-javascript"
+                                // Safe by construction: the value is either
+                                // escapeHtml(content) or Prism.highlight output,
+                                // which escapes the source text and only adds its
+                                // own <span class="token"> markup. Clipboard
+                                // content is never interpreted as HTML.
+                                // eslint-disable-next-line react/dom-no-dangerously-set-innerhtml
                                 dangerouslySetInnerHTML={{ __html: highlightedCode }}
                               />
                             </pre>

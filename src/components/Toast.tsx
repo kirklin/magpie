@@ -1,34 +1,6 @@
+import type { Toast } from "../stores/toast";
 import { useEffect, useState } from "react";
-import { create } from "zustand";
-
-// --- Toast Store ---
-
-interface Toast {
-  id: number;
-  message: string;
-  type: "success" | "info" | "error";
-}
-
-interface ToastStore {
-  toasts: Toast[];
-  add: (message: string, type?: Toast["type"]) => void;
-  remove: (id: number) => void;
-}
-
-let nextId = 0;
-
-export const useToastStore = create<ToastStore>(set => ({
-  toasts: [],
-  add: (message, type = "success") => {
-    const id = nextId++;
-    set(state => ({ toasts: [...state.toasts, { id, message, type }] }));
-    // Auto-remove after 2s
-    setTimeout(() => {
-      set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
-    }, 2000);
-  },
-  remove: id => set(state => ({ toasts: state.toasts.filter(t => t.id !== id) })),
-}));
+import { useToastStore } from "../stores/toast";
 
 // --- Toast Container Component ---
 
