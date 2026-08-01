@@ -55,9 +55,8 @@ pub async fn get_file_icon(
 
 #[cfg(target_os = "macos")]
 fn fetch_app_icon_macos(bundle_id: &str) -> Result<String, String> {
-    use objc2_app_kit::{NSBitmapImageRep, NSWorkspace};
-    use objc2_foundation::{NSData, NSString};
-    use objc2::rc::Retained;
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::NSString;
 
     let workspace = NSWorkspace::sharedWorkspace();
 
@@ -80,40 +79,57 @@ fn fetch_file_icon_macos(file_path: &str) -> Result<String, String> {
     fetch_icon_for_path(&path, 128.0)
 }
 
+/// Render the icon for `path` as a base64 PNG data URL.
+///
+/// The whole body runs inside an `autoreleasepool`, and that is load-bearing
+/// rather than tidiness. Every step here hands back an autoreleased object:
+/// `iconForFile:` returns an NSImage carrying EVERY representation of the icon
+/// (16pt through 1024pt), and `TIFFRepresentation` serializes all of them into
+/// one UNCOMPRESSED NSData — megabytes per call. Tauri commands run on runtime
+/// worker threads that have no pool of their own, so without this those objects
+/// were never released: scrolling the history once leaked hundreds of MB into
+/// the Foundation zone, and it never came back. `get_file_icon` deliberately
+/// has no Rust-side cache, so it is called for every distinct file path, which
+/// is what turned the leak into gigabytes.
 #[cfg(target_os = "macos")]
 fn fetch_icon_for_path(path: &objc2_foundation::NSString, size: f64) -> Result<String, String> {
-    use objc2_app_kit::{NSBitmapImageRep, NSWorkspace};
-    use objc2_foundation::NSData;
-    use objc2::rc::Retained;
-    
-    let workspace = NSWorkspace::sharedWorkspace();
+    use objc2::rc::autoreleasepool;
 
-    // Get icon for the app path
-    let icon = workspace.iconForFile(path);
+    autoreleasepool(|_| {
+        use objc2_app_kit::{NSBitmapImageRep, NSWorkspace};
+        use objc2_foundation::NSData;
+        use objc2::rc::Retained;
 
-    // Set a reasonable size for the icon
-    let ns_size = objc2_foundation::NSSize::new(size, size);
-    icon.setSize(ns_size);
+        let workspace = NSWorkspace::sharedWorkspace();
 
-    // Convert to TIFF data
-    let tiff_data: Retained<NSData> = icon.TIFFRepresentation()
-        .ok_or("Failed to get TIFF representation")?;
+        // Get icon for the app path
+        let icon = workspace.iconForFile(path);
 
-    // Create bitmap rep from TIFF
-    let bitmap_rep = NSBitmapImageRep::imageRepWithData(&tiff_data)
-        .ok_or("Failed to create bitmap rep")?;
+        // Set a reasonable size for the icon. This shrinks what gets drawn, but
+        // NOT what TIFFRepresentation serializes below — hence the pool.
+        let ns_size = objc2_foundation::NSSize::new(size, size);
+        icon.setSize(ns_size);
 
-    // Convert to PNG
-    use objc2_app_kit::NSBitmapImageFileType;
-    let png_data = unsafe { bitmap_rep
-        .representationUsingType_properties(NSBitmapImageFileType::PNG, &objc2_foundation::NSDictionary::new()) }
-        .ok_or("Failed to convert to PNG")?;
+        // Convert to TIFF data
+        let tiff_data: Retained<NSData> = icon.TIFFRepresentation()
+            .ok_or("Failed to get TIFF representation")?;
 
-    // Encode to base64
-    let bytes = png_data.to_vec();
-    let base64_str = base64_encode(&bytes);
+        // Create bitmap rep from TIFF
+        let bitmap_rep = NSBitmapImageRep::imageRepWithData(&tiff_data)
+            .ok_or("Failed to create bitmap rep")?;
 
-    Ok(format!("data:image/png;base64,{}", base64_str))
+        // Convert to PNG
+        use objc2_app_kit::NSBitmapImageFileType;
+        let png_data = unsafe { bitmap_rep
+            .representationUsingType_properties(NSBitmapImageFileType::PNG, &objc2_foundation::NSDictionary::new()) }
+            .ok_or("Failed to convert to PNG")?;
+
+        // Copy the bytes out BEFORE the pool drains — png_data dies with it.
+        let bytes = png_data.to_vec();
+        let base64_str = base64_encode(&bytes);
+
+        Ok(format!("data:image/png;base64,{}", base64_str))
+    })
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -157,5 +173,84 @@ fn base64_encode(input: &[u8]) -> String {
 pub fn hide_window(app_handle: tauri::AppHandle) {
     if let Some(window) = tauri::Manager::get_webview_window(&app_handle, "main") {
         let _ = window.hide();
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    /// Resident set size of this process, in MB.
+    fn rss_mb() -> u64 {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .expect("ps");
+        String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
+    }
+
+    /// Icon fetching must not grow memory without bound.
+    ///
+    /// `fetch_icon_for_path` builds an NSImage holding every representation of
+    /// the icon and serializes all of them into one uncompressed TIFF. Without
+    /// an `autoreleasepool` around it those objects are never released on a
+    /// Tauri worker thread, and repeated calls (one per distinct file path in
+    /// the history list, uncached by design) grow the Foundation zone into the
+    /// gigabytes. Ignored by default: it measures process RSS, so it is timing
+    /// and machine dependent rather than a clean unit assertion.
+    ///
+    /// Run with: cargo test --lib icon_fetch_does_not_leak -- --ignored --nocapture
+    /// Byte-for-byte what `fetch_icon_for_path` does, minus the autoreleasepool.
+    /// Exists purely so the test can A/B the pool against its absence in ONE
+    /// process — comparing across runs is too noisy to prove anything.
+    fn fetch_icon_unpooled(path: &objc2_foundation::NSString, size: f64) -> Result<String, String> {
+        use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let icon = workspace.iconForFile(path);
+        icon.setSize(objc2_foundation::NSSize::new(size, size));
+        let tiff_data = icon.TIFFRepresentation().ok_or("no tiff")?;
+        let bitmap_rep = NSBitmapImageRep::imageRepWithData(&tiff_data).ok_or("no rep")?;
+        let png_data = unsafe {
+            bitmap_rep.representationUsingType_properties(
+                NSBitmapImageFileType::PNG,
+                &objc2_foundation::NSDictionary::new(),
+            )
+        }
+        .ok_or("no png")?;
+        Ok(base64_encode(&png_data.to_vec()))
+    }
+
+    #[test]
+    #[ignore = "measures process RSS; run explicitly"]
+    fn icon_fetch_does_not_leak() {
+        const N: usize = 400;
+        let path = objc2_foundation::NSString::from_str("/Applications");
+
+        // Warm up so first-call initialization counts against neither variant.
+        for _ in 0..50 {
+            let _ = fetch_icon_for_path(&path, 128.0);
+        }
+
+        let base = rss_mb();
+        for _ in 0..N {
+            let _ = fetch_icon_unpooled(&path, 128.0);
+        }
+        let unpooled = rss_mb().saturating_sub(base);
+
+        // Reclaim what the unpooled run stranded, so the pooled measurement
+        // starts from a settled baseline rather than inheriting that growth.
+        objc2::rc::autoreleasepool(|_| {});
+        let base = rss_mb();
+        for _ in 0..N {
+            let _ = fetch_icon_for_path(&path, 128.0);
+        }
+        let pooled = rss_mb().saturating_sub(base);
+
+        println!("over {N} icon fetches — without pool: +{unpooled} MB, with pool: +{pooled} MB");
+        assert!(
+            pooled < 50,
+            "pooled icon fetching still grew {pooled} MB over {N} calls"
+        );
     }
 }
