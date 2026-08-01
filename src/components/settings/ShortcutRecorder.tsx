@@ -99,11 +99,22 @@ function formatShortcutDisplay(shortcut: string): string[] {
   const symbols: string[] = [];
   for (const part of parts) {
     switch (part) {
-      case "CmdOrCtrl": case "Cmd": symbols.push("⌘"); break;
-      case "Ctrl": symbols.push("⌃"); break;
-      case "Shift": symbols.push("⇧"); break;
-      case "Alt": case "Option": symbols.push("⌥"); break;
-      default: symbols.push(KEY_DISPLAY[part] ?? part);
+      case "CmdOrCtrl":
+      case "Cmd":
+        symbols.push("⌘");
+        break;
+      case "Ctrl":
+        symbols.push("⌃");
+        break;
+      case "Shift":
+        symbols.push("⇧");
+        break;
+      case "Alt":
+      case "Option":
+        symbols.push("⌥");
+        break;
+      default:
+        symbols.push(KEY_DISPLAY[part] ?? part);
     }
   }
   return symbols;
@@ -251,7 +262,8 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
     e.preventDefault();
     e.stopPropagation();
     if (e.key === "Escape") {
-      closeRecording(); return;
+      closeRecording();
+      return;
     }
     const shortcut = keyEventToShortcut(e);
     if (!shortcut) {
@@ -266,7 +278,8 @@ export function ShortcutRecorder({ label, description, value, onChange }: Shortc
       setIsError(true);
       setErrorMsg(String(err));
       setTimeout(() => {
-        setIsError(false); setErrorMsg("");
+        setIsError(false);
+        setErrorMsg("");
       }, 3000);
     }
   }, [isRecording, onChange]);

@@ -39,6 +39,51 @@ interface ActionPanelProps {
   groups: ActionGroup[];
 }
 
+const ActionButton = forwardRef<
+  HTMLButtonElement,
+  {
+    action: Action;
+    isSelected: boolean;
+    onSelect: () => void;
+    onClick: () => void;
+  }
+>(({ action, isSelected, onSelect, onClick }, ref) => (
+  <button
+    ref={ref}
+    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors ${
+      isSelected
+        ? "bg-bg-hover"
+        : "hover:bg-bg-hover/50"
+    } ${action.danger ? "text-red-400" : "text-text-primary"}`}
+    onClick={onClick}
+    onMouseEnter={onSelect}
+  >
+    <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded ${
+      isSelected
+        ? action.danger ? "text-red-400" : "text-text-primary"
+        : "text-text-secondary"
+    }`}
+    >
+      {action.icon}
+    </span>
+    <span className="flex-1 text-[13px] font-medium">{action.label}</span>
+    {action.shortcut && (
+      <div className="flex items-center gap-1 opacity-60">
+        {action.shortcut.map((key, i) => (
+          <kbd
+            key={i}
+            className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-bg-hover rounded border border-border font-sans shadow-sm"
+          >
+            {key}
+          </kbd>
+        ))}
+      </div>
+    )}
+  </button>
+));
+
+ActionButton.displayName = "ActionButton";
+
 // --- ActionPanel Component ---
 
 export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
@@ -227,51 +272,6 @@ export function ActionPanel({ isOpen, onClose, groups }: ActionPanelProps) {
     </>
   );
 }
-
-const ActionButton = forwardRef<
-  HTMLButtonElement,
-  {
-    action: Action;
-    isSelected: boolean;
-    onSelect: () => void;
-    onClick: () => void;
-  }
->(({ action, isSelected, onSelect, onClick }, ref) => (
-  <button
-    ref={ref}
-    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors ${
-      isSelected
-        ? "bg-bg-hover"
-        : "hover:bg-bg-hover/50"
-    } ${action.danger ? "text-red-400" : "text-text-primary"}`}
-    onClick={onClick}
-    onMouseEnter={onSelect}
-  >
-    <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded ${
-      isSelected
-        ? action.danger ? "text-red-400" : "text-text-primary"
-        : "text-text-secondary"
-    }`}
-    >
-      {action.icon}
-    </span>
-    <span className="flex-1 text-[13px] font-medium">{action.label}</span>
-    {action.shortcut && (
-      <div className="flex items-center gap-1 opacity-60">
-        {action.shortcut.map((key, i) => (
-          <kbd
-            key={i}
-            className="flex items-center justify-center min-w-[20px] h-[22px] px-1 text-[11px] bg-bg-hover rounded border border-border font-sans shadow-sm"
-          >
-            {key}
-          </kbd>
-        ))}
-      </div>
-    )}
-  </button>
-));
-
-ActionButton.displayName = "ActionButton";
 
 // --- Action Builder ---
 

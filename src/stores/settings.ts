@@ -97,16 +97,6 @@ function applyAppearance(themeMode: ThemeMode, accentId: AccentColorId) {
   applyAccentColor(accentId, themeMode);
 }
 
-// Listen for system theme changes
-if (typeof window !== "undefined") {
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    const state = useSettingsStore.getState();
-    if (state.settings.theme === "system") {
-      applyAppearance("system", state.settings.accent_color);
-    }
-  });
-}
-
 export const useSettingsStore = create<SettingsStore>(set => ({
   settings: DEFAULT_SETTINGS,
   isLoading: true,
@@ -196,3 +186,15 @@ export const useSettingsStore = create<SettingsStore>(set => ({
     }
   },
 }));
+
+// Listen for system theme changes. Registered after the store is defined so the
+// reference below resolves at module-eval order rather than relying on the
+// listener firing late enough to find it.
+if (typeof window !== "undefined") {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    const state = useSettingsStore.getState();
+    if (state.settings.theme === "system") {
+      applyAppearance("system", state.settings.accent_color);
+    }
+  });
+}

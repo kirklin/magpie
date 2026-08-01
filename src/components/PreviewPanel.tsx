@@ -342,41 +342,45 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                   {/* File preview area. Only preview inline for a SINGLE file —
                       a multi-file entry must show the file list, not the content
                       of whichever file happens to be previewable. */}
-                  {(filePaths.length === 1 && previewableFile) ? (
-                    <div className="flex items-center justify-center flex-1 min-h-0">
-                      <FilePreview filePath={previewableFile} />
-                    </div>
-                  ) : filePaths.length === 1 ? (
-                  /* Single non-previewable file: show large native icon */
-                    <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-4">
-                      <NativeFileIcon filePath={filePaths[0]} className="w-32 h-32 drop-shadow-md" />
-                      <div className="text-center px-4">
-                        <div className="text-[16px] font-medium text-text-primary break-all">
-                          {filePaths[0].split("/").pop() || filePaths[0]}
+                  {(filePaths.length === 1 && previewableFile)
+                    ? (
+                        <div className="flex items-center justify-center flex-1 min-h-0">
+                          <FilePreview filePath={previewableFile} />
                         </div>
-                        <div className="text-[12px] text-text-tertiary mt-1 uppercase tracking-widest font-semibold">
-                          {filePaths[0].substring(filePaths[0].lastIndexOf(".") + 1) || "FILE"}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                  /* Multiple files: show list with native icons */
-                    <div className="space-y-2">
-                      {filePaths.map((filePath, i) => {
-                        const fileName = filePath.split("/").pop() || filePath;
-                        const dirPath = filePath.substring(0, filePath.length - fileName.length);
-                        return (
-                          <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-secondary">
-                            <NativeFileIcon filePath={filePath} className="w-8 h-8 mt-0.5 shrink-0" />
-                            <div className="min-w-0 flex-1 self-center">
-                              <div className="text-[13px] text-text-primary font-medium truncate">{fileName}</div>
-                              <div className="text-[11px] text-text-tertiary truncate mt-0.5">{shortenPath(dirPath)}</div>
+                      )
+                    : filePaths.length === 1
+                      ? (
+                        /* Single non-previewable file: show large native icon */
+                          <div className="flex flex-col items-center justify-center flex-1 min-h-0 gap-4">
+                            <NativeFileIcon filePath={filePaths[0]} className="w-32 h-32 drop-shadow-md" />
+                            <div className="text-center px-4">
+                              <div className="text-[16px] font-medium text-text-primary break-all">
+                                {filePaths[0].split("/").pop() || filePaths[0]}
+                              </div>
+                              <div className="text-[12px] text-text-tertiary mt-1 uppercase tracking-widest font-semibold">
+                                {filePaths[0].substring(filePaths[0].lastIndexOf(".") + 1) || "FILE"}
+                              </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )
+                      : (
+                        /* Multiple files: show list with native icons */
+                          <div className="space-y-2">
+                            {filePaths.map((filePath, i) => {
+                              const fileName = filePath.split("/").pop() || filePath;
+                              const dirPath = filePath.substring(0, filePath.length - fileName.length);
+                              return (
+                                <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-secondary">
+                                  <NativeFileIcon filePath={filePath} className="w-8 h-8 mt-0.5 shrink-0" />
+                                  <div className="min-w-0 flex-1 self-center">
+                                    <div className="text-[13px] text-text-primary font-medium truncate">{fileName}</div>
+                                    <div className="text-[11px] text-text-tertiary truncate mt-0.5">{shortenPath(dirPath)}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                 </div>
               )
             : isColor

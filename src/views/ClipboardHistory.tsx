@@ -512,7 +512,7 @@ export function ClipboardHistory() {
     } else if (rowIndex >= endIndex) {
       virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "end", offset: SCROLL_MARGIN });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps are deliberately narrowed to selectedId — see above.
   }, [selectedId]);
 
   // Build grouped actions for the action panel
