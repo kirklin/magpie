@@ -7,8 +7,34 @@ use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::database::pool::get_pool;
 use crate::clipboard::native;
 use crate::clipboard::paste;
+use crate::clipboard::thumbnail;
 use crate::error::AppError;
 use crate::platform::{ClipboardPort, PasterPort, WritePayload};
+
+/// Resolve the image the history list should actually load for `image_path`.
+///
+/// Returns a small pre-scaled thumbnail when one applies, else the original
+/// path. Rendering the original in a 24pt row forced the WebView to decode the
+/// full bitmap (tens of MB for a screenshot) purely to throw the pixels away;
+/// see `clipboard::thumbnail` for the full rationale.
+///
+/// Generation is lazy so the ~1000 images captured before thumbnails existed
+/// get one on first display, and it runs on the blocking pool because decoding
+/// and re-encoding a PNG is CPU-bound work that must not stall the async
+/// runtime that also drives clipboard capture.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_thumbnail(app_handle: AppHandle, image_path: String) -> Result<String, AppError> {
+    let path = tokio::task::spawn_blocking(move || {
+        let src = std::path::Path::new(&image_path);
+        thumbnail::ensure_thumbnail(&app_handle, src)
+    })
+    .await
+    .map_err(|e| AppError::Other { message: e.to_string() })?
+    .map_err(|message| AppError::Other { message })?;
+
+    Ok(path.to_string_lossy().to_string())
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -101,6 +127,7 @@ pub async fn delete_clipboard_entry(app_handle: AppHandle, id: i32) -> Result<()
         .await?;
 
     if let Some(path) = image_path {
+        thumbnail::remove_for_image(&app_handle, std::path::Path::new(&path));
         let _ = std::fs::remove_file(path);
     }
     Ok(())
@@ -125,6 +152,7 @@ pub async fn clear_clipboard_history(app_handle: AppHandle) -> Result<(), AppErr
         .await?;
 
     for path in image_paths {
+        thumbnail::remove_for_image(&app_handle, std::path::Path::new(&path));
         let _ = std::fs::remove_file(path);
     }
     Ok(())

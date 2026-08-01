@@ -99,6 +99,7 @@ pub async fn prune_history(app_handle: &AppHandle) -> Result<(), String> {
     // its content hash and UNIQUE(content_hash) means one row per file, so a
     // pruned row's image is never referenced by a surviving row.
     for path in by_id.values().flatten() {
+        super::thumbnail::remove_for_image(app_handle, std::path::Path::new(path));
         let _ = std::fs::remove_file(path);
     }
 

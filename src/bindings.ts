@@ -14,6 +14,20 @@ export const commands = {
   pasteImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_image_entry", { imagePath })),
   /**  Copy an image entry to the clipboard without pasting */
   copyImageEntry: (imagePath: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_image_entry", { imagePath })),
+  /**
+   *  Resolve the image the history list should actually load for `image_path`.
+   *
+   *  Returns a small pre-scaled thumbnail when one applies, else the original
+   *  path. Rendering the original in a 24pt row forced the WebView to decode the
+   *  full bitmap (tens of MB for a screenshot) purely to throw the pixels away;
+   *  see `clipboard::thumbnail` for the full rationale.
+   *
+   *  Generation is lazy so the ~1000 images captured before thumbnails existed
+   *  get one on first display, and it runs on the blocking pool because decoding
+   *  and re-encoding a PNG is CPU-bound work that must not stall the async
+   *  runtime that also drives clipboard capture.
+   */
+  getThumbnail: (imagePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_thumbnail", { imagePath })),
   copyClipboardEntry: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_clipboard_entry", { text })),
   pasteAsPlainText: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_as_plain_text", { text })),
   pasteFileEntry: (filePathsJson: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_file_entry", { filePathsJson })),

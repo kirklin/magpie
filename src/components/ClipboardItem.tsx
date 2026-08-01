@@ -1,7 +1,7 @@
 import type { ClipboardEntry } from "../stores/clipboard";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { Files, Pin } from "lucide-react";
 import { useState } from "react";
+import { useThumbnail } from "../hooks/useThumbnail";
 import { useLocale, useT } from "../i18n";
 import { getTypeIcon } from "../utils/classifier";
 import { NativeFileIcon } from "./PreviewPanel";
@@ -73,6 +73,12 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
 
   const isMultiFile = isFile && parsedPaths.length > 1;
 
+  // Resolve downscaled thumbnails for both kinds of inline preview. Called
+  // unconditionally (the hook no-ops on null) so hook order stays stable across
+  // renders as an entry's type-dependent branches change.
+  const imageThumbSrc = useThumbnail(isImage ? entry.image_path : null);
+  const fileThumbSrc = useThumbnail(fileImagePath);
+
   return (
     <div
       data-entry-id={entry.id}
@@ -89,12 +95,14 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
       {(isImage && !thumbFailed)
         ? (
             <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
-              <img
-                src={convertFileSrc(entry.image_path!)}
-                alt=""
-                className="w-full h-full object-cover"
-                onError={() => setThumbFailed(true)}
-              />
+              {imageThumbSrc && (
+                <img
+                  src={imageThumbSrc}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={() => setThumbFailed(true)}
+                />
+              )}
             </div>
           )
         : isMultiFile
@@ -109,12 +117,14 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
           : (isFile && fileImagePath && !thumbFailed)
               ? (
                   <div className="w-6 h-6 rounded overflow-hidden shrink-0 bg-bg-tertiary">
-                    <img
-                      src={convertFileSrc(fileImagePath)}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      onError={() => setThumbFailed(true)}
-                    />
+                    {fileThumbSrc && (
+                      <img
+                        src={fileThumbSrc}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => setThumbFailed(true)}
+                      />
+                    )}
                   </div>
                 )
               : (isFile && parsedPaths && parsedPaths.length === 1)

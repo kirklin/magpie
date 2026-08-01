@@ -484,6 +484,14 @@ async fn store_image_entry(
     encode_rgba_to_png(&rgba_bytes, width, height, &file_path)
         .map_err(|e| format!("Failed to save image: {}", e))?;
 
+    // Pre-generate the list thumbnail while the capture is already warm, so the
+    // history list never has to decode this full-size bitmap just to draw a
+    // 24pt row. Best-effort: if it fails the UI falls back to the original, and
+    // a capture must not be lost over a thumbnail.
+    if let Err(e) = super::thumbnail::ensure_thumbnail(app_handle, &file_path) {
+        log::warn!("[Thumbnail] generation failed for {}: {}", file_path.display(), e);
+    }
+
     let file_path_str = file_path.to_string_lossy().to_string();
     let preview = format!("Image ({}×{})", width, height);
     let byte_size = std::fs::metadata(&file_path).map(|m| m.len() as i64).unwrap_or(rgba_bytes.len() as i64);

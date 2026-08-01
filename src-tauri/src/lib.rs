@@ -35,6 +35,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::clipboard::paste_clipboard_entry,
         commands::clipboard::paste_image_entry,
         commands::clipboard::copy_image_entry,
+        commands::clipboard::get_thumbnail,
         commands::clipboard::copy_clipboard_entry,
         commands::clipboard::paste_as_plain_text,
         commands::clipboard::paste_file_entry,

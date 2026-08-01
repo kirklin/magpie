@@ -3,3 +3,4 @@ pub mod classifier;
 pub mod native;
 pub mod paste;
 pub mod retention;
+pub mod thumbnail;
