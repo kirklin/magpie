@@ -82,3 +82,14 @@ pub fn hide_window(app_handle: tauri::AppHandle) {
         let _ = window.hide();
     }
 }
+
+/// Let the desktop move the main window along with the pressed pointer.
+#[tauri::command]
+#[specta::specta]
+pub fn start_window_drag(app_handle: tauri::AppHandle) -> Result<(), AppError> {
+    let window = app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Other { message: "main window missing".to_string() })?;
+    app_handle.state::<crate::DragStarted>().mark();
+    window.start_dragging().map_err(|e| AppError::Other { message: e.to_string() })
+}

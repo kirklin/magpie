@@ -100,6 +100,8 @@ export const commands = {
   getPasterCapabilities: () => __TAURI_INVOKE<PasterCapabilities>("get_paster_capabilities"),
   /**  Hide the main window */
   hideWindow: () => __TAURI_INVOKE<void>("hide_window"),
+  /**  Let the desktop move the main window along with the pressed pointer. */
+  startWindowDrag: () => typedError<null, AppError>(__TAURI_INVOKE("start_window_drag")),
 };
 
 /* Types */

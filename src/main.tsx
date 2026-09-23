@@ -1,7 +1,7 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { commands } from "./bindings";
 
 // Global drag handler for custom titlebar regions
 // CSS -webkit-app-region:drag is unreliable on macOS transparent windows
@@ -16,7 +16,11 @@ document.addEventListener("mousedown", (e) => {
   // Check if click is inside a drag-region
   if (target.closest(".drag-region")) {
     e.preventDefault();
-    getCurrentWindow().startDragging();
+    commands.startWindowDrag().then((result) => {
+      if (result.status === "error") {
+        console.error("window drag failed", result.error);
+      }
+    });
   }
 });
 

@@ -34,8 +34,8 @@ use ::windows::Win32::UI::Shell::{
     SHSimpleIDListFromPath, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY,
 };
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow,
-    SetForegroundWindow, ShowWindow, SW_RESTORE,
+    EnumChildWindows, GetAncestor, GetForegroundWindow, GetWindowThreadProcessId, IsIconic,
+    IsWindow, SetForegroundWindow, ShowWindow, GA_ROOTOWNER, SW_RESTORE,
 };
 use tauri::{AppHandle, Manager};
 
@@ -287,6 +287,20 @@ impl Paster for WinPaster {
 
     fn capabilities(&self) -> PasterCapabilities {
         PasterCapabilities { can_paste: true, can_activate_app: true, can_read_focus: true }
+    }
+}
+
+/// Whether the foreground window is Magpie's own window `hwnd` or one it owns
+/// (a file dialog). Losing keyboard focus while that holds is internal: WebView2
+/// drops and retakes focus within a single message when a window drag starts
+/// and ends (tauri-apps/tauri#10767).
+pub fn foreground_is_own(hwnd: isize) -> bool {
+    unsafe {
+        let foreground = GetForegroundWindow();
+        if foreground.0.is_null() {
+            return false;
+        }
+        foreground.0 as isize == hwnd || GetAncestor(foreground, GA_ROOTOWNER).0 as isize == hwnd
     }
 }
 

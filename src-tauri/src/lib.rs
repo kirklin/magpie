@@ -46,6 +46,21 @@ struct LastBlurHide(Mutex<Option<Instant>>);
 /// and puts it off-center on Linux.
 struct ShownBefore(AtomicBool);
 
+/// When Magpie last asked the desktop to move its window (a drag on one of
+/// the title-bar regions). Some compositors take keyboard focus away for the
+/// whole interactive move, which must not count as the user leaving the window.
+pub struct DragStarted(Mutex<Option<Instant>>);
+
+impl DragStarted {
+    pub fn mark(&self) {
+        *self.0.lock().expect("drag lock poisoned") = Some(Instant::now());
+    }
+
+    fn just_started(&self) -> bool {
+        self.0.lock().expect("drag lock poisoned").is_some_and(|at| at.elapsed() < Duration::from_millis(500))
+    }
+}
+
 /// Single source of truth for the IPC command surface. Used both to build the
 /// runtime invoke handler and to export the TypeScript bindings (see the
 /// `export_typescript_bindings` test, run via `cargo test`).
@@ -86,6 +101,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::system::get_file_icon,
         commands::system::get_paster_capabilities,
         commands::system::hide_window,
+        commands::system::start_window_drag,
     ])
 }
 
@@ -190,6 +206,7 @@ pub fn run() {
         .manage(SkipBlurHide(AtomicBool::new(false)))
         .manage(LastBlurHide(Mutex::new(None)))
         .manage(ShownBefore(AtomicBool::new(false)))
+        .manage(DragStarted(Mutex::new(None)))
         .manage(shortcut::ActiveShortcut::new())
         // --- Commands ---
         .invoke_handler(specta.invoke_handler())
@@ -283,6 +300,8 @@ pub fn run() {
 
                 let window_clone = window.clone();
                 let handle_for_events = app.handle().clone();
+                #[cfg(target_os = "windows")]
+                let hwnd = window.hwnd().expect("main window handle").0 as isize;
                 window.on_window_event(move |event| match event {
                     // Auto-hide on blur (lose focus), unless SkipBlurHide is set
                     tauri::WindowEvent::Focused(false) => {
@@ -290,15 +309,32 @@ pub fn run() {
                         if skip.0.load(Ordering::Relaxed) {
                             return; // Don't hide during paste-and-keep-window
                         }
+                        if handle_for_events.state::<DragStarted>().just_started() {
+                            return;
+                        }
                         #[cfg(target_os = "linux")]
                         if platform::focus_moved_to_own_popup(&window_clone) {
                             return;
                         }
-                        if window_clone.is_visible().unwrap_or(false) {
-                            let _ = window_clone.hide();
-                            *handle_for_events.state::<LastBlurHide>().0.lock().expect("blur lock poisoned") =
-                                Some(Instant::now());
+                        // WebView2 loses and regains focus within one message
+                        // when a window drag starts or ends; only a focus loss
+                        // that leaves another window in the foreground counts.
+                        #[cfg(target_os = "windows")]
+                        {
+                            let window = window_clone.clone();
+                            let handle = handle_for_events.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(150));
+                                if platform::foreground_is_own(hwnd)
+                                    || handle.state::<SkipBlurHide>().0.load(Ordering::Relaxed)
+                                {
+                                    return;
+                                }
+                                hide_on_blur(&window, &handle);
+                            });
                         }
+                        #[cfg(not(target_os = "windows"))]
+                        hide_on_blur(&window_clone, &handle_for_events);
                     }
                     // Alt+F4 and the window manager's close action hide the
                     // window like Escape does. Closing it would destroy the only
@@ -347,6 +383,16 @@ pub fn run() {
 }
 
 /// Toggle the main window visibility
+/// Hide the window because the user moved on to something else, remembering
+/// when, so that the tray click or shortcut which caused the blur doesn't
+/// bring it straight back.
+fn hide_on_blur(window: &tauri::WebviewWindow, handle: &tauri::AppHandle) {
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        *handle.state::<LastBlurHide>().0.lock().expect("blur lock poisoned") = Some(Instant::now());
+    }
+}
+
 pub fn toggle_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {

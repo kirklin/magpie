@@ -25,6 +25,8 @@ mod windows;
 
 #[cfg(target_os = "linux")]
 pub use linux::{ensure_identity_entry, focus_moved_to_own_popup, is_wayland, GlobalShortcutPortal};
+#[cfg(target_os = "windows")]
+pub use windows::foreground_is_own;
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 compile_error!("Magpie supports macOS, Windows and Linux");
