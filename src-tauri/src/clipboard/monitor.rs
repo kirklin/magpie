@@ -163,8 +163,9 @@ pub fn start_monitor(app_handle: AppHandle) {
                             Duration::from_secs(5),
                             async {
                                 // Read the whole clipboard as one snapshot via the
-                                // platform port. None = sensitive/unrecognized.
-                                let Some(captured) = clip.read() else {
+                                // platform port. None = sensitive/unrecognized;
+                                // Err = unreadable right now, retried next poll.
+                                let Some(captured) = clip.read()? else {
                                     return Ok(None);
                                 };
                                 // Attribute the source app once, right after the
@@ -370,7 +371,7 @@ async fn store_file_entry(
         &hash,
         &preview,
         byte_size,
-        source.bundle_id.as_deref(),
+        source.app_id.as_deref(),
         source.name.as_deref(),
         &now,
     )
@@ -427,7 +428,7 @@ async fn store_text_entry(
         &hash,
         &preview,
         byte_size,
-        source.bundle_id.as_deref(),
+        source.app_id.as_deref(),
         source.name.as_deref(),
         &now,
     )
@@ -511,7 +512,7 @@ async fn store_image_entry(
         &hash,
         &preview,
         byte_size,
-        source.bundle_id.as_deref(),
+        source.app_id.as_deref(),
         source.name.as_deref(),
         &now,
     )

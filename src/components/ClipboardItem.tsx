@@ -3,6 +3,7 @@ import { Files, Pin } from "lucide-react";
 import { useState } from "react";
 import { useThumbnail } from "../hooks/useThumbnail";
 import { useLocale, useT } from "../i18n";
+import { basename, extension } from "../lib/platform";
 import { getTypeIcon } from "../utils/classifier";
 import { NativeFileIcon } from "./PreviewPanel";
 
@@ -35,11 +36,11 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
       parsedPaths = JSON.parse(entry.file_paths);
       if (!entry.custom_name) {
         if (parsedPaths.length === 1) {
-          displayName = parsedPaths[0].split("/").pop() || parsedPaths[0];
+          displayName = basename(parsedPaths[0]);
         } else {
           // Show the first few file names, then cap with a count — otherwise
           // copying e.g. 100 files would build a huge label and hover title.
-          const names = parsedPaths.map(p => p.split("/").pop() || p);
+          const names = parsedPaths.map(basename);
           const MAX_NAMES = 3;
           const sep = locale === "zh" ? "、" : ", ";
           displayName = names.length > MAX_NAMES
@@ -51,18 +52,18 @@ export function ClipboardItem({ entry, isSelected, quickPasteIndex, onClick, onD
       // excluded: an <img> with a video src makes the browser fetch the entire
       // (possibly huge) video file just to fail, which made scrolling janky.
       const imageExts = new Set([
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-        ".bmp",
-        ".tiff",
-        ".heic",
-        ".avif",
-        ".svg",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "bmp",
+        "tiff",
+        "heic",
+        "avif",
+        "svg",
       ]);
-      const thumbPath = parsedPaths.find(p => imageExts.has(p.substring(p.lastIndexOf(".")).toLowerCase()));
+      const thumbPath = parsedPaths.find(p => imageExts.has(extension(p).toLowerCase()));
       if (thumbPath) {
         fileImagePath = thumbPath;
       }

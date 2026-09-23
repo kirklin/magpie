@@ -7,7 +7,7 @@ import { Filter, Pin, Settings } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { ActionPanel } from "../components/ActionPanel";
-import { buildClipboardActionGroups } from "../components/clipboardActions";
+import { buildClipboardActionGroups, pasteLabel } from "../components/clipboardActions";
 import { ClipboardItem } from "../components/ClipboardItem";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EditContentModal } from "../components/EditContentModal";
@@ -15,9 +15,11 @@ import { EmptyState } from "../components/EmptyState";
 import { PreviewPanel } from "../components/PreviewPanel";
 import { SearchBar } from "../components/SearchBar";
 import { ToastContainer } from "../components/Toast";
-import { useCommandHold } from "../hooks/useCommandHold";
+import { usePasterCapabilities } from "../hooks/usePasterCapabilities";
+import { usePrimaryModifierHold } from "../hooks/usePrimaryModifierHold";
 import { useLocale, useT } from "../i18n";
 import { parseAppError } from "../lib/error";
+import { isOnlyPrimaryModifier, isPrimaryModifier, KEY_LABEL } from "../lib/platform";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useToastStore } from "../stores/toast";
@@ -67,8 +69,13 @@ export function ClipboardHistory() {
   const visibleRangeRef = useRef({ startIndex: 0, endIndex: 0 });
   const searchBarRef = useRef<SearchBarRef>(null);
 
-  // Command-hold quick-paste feature
-  const isCommandHeld = useCommandHold(300);
+  // Hold ⌘ (Ctrl outside macOS) for the quick-paste number badges
+  const isCommandHeld = usePrimaryModifierHold(300);
+  const capabilities = usePasterCapabilities();
+  // Where the desktop won't let Magpie type the paste keystroke, "paste"
+  // leaves the entry on the clipboard for the user's own Ctrl+V.
+  const canPaste = capabilities?.can_paste ?? true;
+  const canKeepWindow = canPaste && (capabilities?.can_activate_app ?? false);
 
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -116,7 +123,7 @@ export function ClipboardHistory() {
       addNewEntry(event.payload);
     });
 
-    const unlistenActiveApp = listen<string>("active-app-changed", (event) => {
+    const unlistenActiveApp = listen<string | null>("active-app-changed", (event) => {
       setActiveApp(event.payload);
     });
 
@@ -128,22 +135,38 @@ export function ClipboardHistory() {
 
   // --- Action callbacks ---
 
-  const handlePaste = useCallback(async () => {
-    if (!selectedEntry) {
-      return;
-    }
+  // Paste `entry` into the app Magpie was summoned from, or, where this desktop
+  // can't synthesize the keystroke, put it on the clipboard and step aside.
+  const pasteOrCopy = useCallback(async (entry: ClipboardEntry) => {
     try {
-      if (selectedEntry.content_type === "image" && selectedEntry.image_path) {
-        await pasteImageEntry(selectedEntry.image_path);
-      } else if (selectedEntry.content_type === "file" && selectedEntry.file_paths) {
-        await pasteFileEntry(selectedEntry.file_paths);
-      } else if (selectedEntry.text_content) {
-        await pasteEntry(selectedEntry.text_content);
+      const isImage = entry.content_type === "image" && entry.image_path;
+      const isFile = entry.content_type === "file" && entry.file_paths;
+      if (!canPaste) {
+        if (isImage) {
+          await copyImageEntry(entry.image_path!);
+        } else if (isFile) {
+          await copyFileEntry(entry.file_paths!);
+        } else if (entry.text_content) {
+          await copyEntry(entry.text_content);
+        }
+        await invoke("hide_window");
+      } else if (isImage) {
+        await pasteImageEntry(entry.image_path!);
+      } else if (isFile) {
+        await pasteFileEntry(entry.file_paths!);
+      } else if (entry.text_content) {
+        await pasteEntry(entry.text_content);
       }
     } catch (e) {
       toast.add(parseAppError(e).message, "error");
     }
-  }, [selectedEntry, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
+  }, [canPaste, copyEntry, copyFileEntry, copyImageEntry, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
+
+  const handlePaste = useCallback(async () => {
+    if (selectedEntry) {
+      await pasteOrCopy(selectedEntry);
+    }
+  }, [selectedEntry, pasteOrCopy]);
 
   const handleCopy = useCallback(async () => {
     if (!selectedEntry) {
@@ -296,21 +319,10 @@ export function ClipboardHistory() {
   // Quick-paste helper: paste the Nth visible entry (0-indexed)
   const quickPasteByIndex = useCallback(async (index: number) => {
     const entry = entries[index];
-    if (!entry) {
-      return;
+    if (entry) {
+      await pasteOrCopy(entry);
     }
-    try {
-      if (entry.content_type === "image" && entry.image_path) {
-        await pasteImageEntry(entry.image_path);
-      } else if (entry.content_type === "file" && entry.file_paths) {
-        await pasteFileEntry(entry.file_paths);
-      } else if (entry.text_content) {
-        await pasteEntry(entry.text_content);
-      }
-    } catch (e) {
-      toast.add(parseAppError(e).message, "error");
-    }
-  }, [entries, pasteEntry, pasteFileEntry, pasteImageEntry, toast]);
+  }, [entries, pasteOrCopy]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -319,19 +331,21 @@ export function ClipboardHistory() {
         return;
       }
 
-      // ⌘ + number (1-9) → quick-paste the Nth item
-      if (e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey) {
-        const num = Number(e.key);
-        if (num >= 1 && num <= 9) {
+      // ⌘/Ctrl + number (1-9) → quick-paste the Nth item. Matched on the
+      // physical key: Shift-less digits aren't on the top row of every layout.
+      const mod = isPrimaryModifier(e);
+      if (isOnlyPrimaryModifier(e)) {
+        const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+        if (digit) {
           e.preventDefault();
-          quickPasteByIndex(num - 1);
+          quickPasteByIndex(Number(digit[1]) - 1);
           return;
         }
       }
 
       const target = e.target as HTMLElement;
-      // When typing in the search input, only handle navigation keys and ⌘ shortcuts
-      if (target.tagName === "INPUT" && !e.metaKey && !e.ctrlKey && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
+      // When typing in the search input, only handle navigation keys and ⌘/Ctrl shortcuts
+      if (target.tagName === "INPUT" && !mod && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape") {
         return;
       }
 
@@ -355,16 +369,16 @@ export function ClipboardHistory() {
           break;
         }
         case "Enter": {
-          if (e.shiftKey) {
+          if (e.shiftKey && canPaste) {
             // Shift+Enter → Paste as plain text
             e.preventDefault();
             handlePastePlainText();
-          } else if (e.altKey) {
+          } else if (e.altKey && canKeepWindow) {
             // Alt+Enter → Paste and keep window
             e.preventDefault();
             handlePasteKeepWindow();
-          } else if (e.metaKey) {
-            // Cmd+Enter → Copy to clipboard
+          } else if (mod) {
+            // ⌘/Ctrl+Enter → Copy to clipboard
             e.preventDefault();
             handleCopy();
           } else {
@@ -375,66 +389,66 @@ export function ClipboardHistory() {
           break;
         }
         case "Backspace": {
-          if (e.metaKey && e.shiftKey) {
+          if (mod && e.shiftKey) {
             e.preventDefault();
             handleClearHistory();
-          } else if (e.metaKey && selectedId) {
+          } else if (mod && selectedId) {
             e.preventDefault();
             handleDelete();
           }
           break;
         }
         case ".": {
-          if (e.metaKey && selectedId) {
+          if (mod && selectedId) {
             e.preventDefault();
             handleTogglePin();
           }
           break;
         }
         case "e": {
-          if (e.metaKey && selectedEntry?.text_content) {
+          if (mod && selectedEntry?.text_content) {
             e.preventDefault();
             handleEditContent();
           }
           break;
         }
         case "o": {
-          if (e.metaKey && selectedEntry?.content_type === "url") {
+          if (mod && selectedEntry?.content_type === "url") {
             e.preventDefault();
             handleOpenUrl();
           }
           break;
         }
         case "c": {
-          if (e.metaKey && e.altKey && selectedEntry?.text_content) {
+          if (mod && e.altKey && selectedEntry?.text_content) {
             e.preventDefault();
             handleAppendToClipboard();
           }
           break;
         }
         case "s": {
-          if (e.metaKey && selectedEntry) {
+          if (mod && selectedEntry) {
             e.preventDefault();
             handleSaveAsFile();
           }
           break;
         }
         case "k": {
-          if (e.metaKey) {
+          if (mod) {
             e.preventDefault();
             setIsActionPanelOpen(true);
           }
           break;
         }
         case ",": {
-          if (e.metaKey) {
+          if (mod) {
             e.preventDefault();
             navigateTo("settings");
           }
           break;
         }
         case "f": {
-          if (e.metaKey) {
+          if (mod) {
             e.preventDefault();
             searchBarRef.current?.toggleFilter();
           }
@@ -454,6 +468,8 @@ export function ClipboardHistory() {
       isActionPanelOpen,
       isEditModalOpen,
       isConfirmClearOpen,
+      canPaste,
+      canKeepWindow,
       setSelectedId,
       handlePaste,
       handleCopy,
@@ -532,6 +548,8 @@ export function ClipboardHistory() {
         }
       : null,
     activeApp,
+    canPaste,
+    canKeepWindow,
     t,
     onPaste: handlePaste,
     onCopy: handleCopy,
@@ -547,6 +565,8 @@ export function ClipboardHistory() {
   }), [
     selectedEntry,
     activeApp,
+    canPaste,
+    canKeepWindow,
     t,
     handlePaste,
     handleCopy,
@@ -619,19 +639,7 @@ export function ClipboardHistory() {
                         isSelected={entry.id === selectedId}
                         quickPasteIndex={qpIndex}
                         onClick={() => setSelectedId(entry.id)}
-                        onDoubleClick={async () => {
-                          try {
-                            if (entry.content_type === "image" && entry.image_path) {
-                              await pasteImageEntry(entry.image_path);
-                            } else if (entry.content_type === "file" && entry.file_paths) {
-                              await pasteFileEntry(entry.file_paths);
-                            } else if (entry.text_content) {
-                              await pasteEntry(entry.text_content);
-                            }
-                          } catch (e) {
-                            toast.add(parseAppError(e).message, "error");
-                          }
-                        }}
+                        onDoubleClick={() => pasteOrCopy(entry)}
                       />
                     );
                   }}
@@ -659,7 +667,7 @@ export function ClipboardHistory() {
             className="flex items-center gap-1.5 text-[13px] text-text-primary font-medium hover:text-text-accent transition-colors"
             onClick={handlePaste}
           >
-            {t("action.paste_to", { app: activeApp })}
+            {pasteLabel(t, canPaste, activeApp)}
             <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">↵</kbd>
           </button>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>
@@ -669,7 +677,7 @@ export function ClipboardHistory() {
           >
             {t("ui.actions")}
             <div className="flex items-center gap-0.5">
-              <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
+              <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">{KEY_LABEL.mod}</kbd>
               <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">K</kbd>
             </div>
           </button>
@@ -680,7 +688,7 @@ export function ClipboardHistory() {
           >
             <Filter className="w-3.5 h-3.5" />
             {t("ui.filter")}
-            <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">⌘</kbd>
+            <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">{KEY_LABEL.mod}</kbd>
             <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[11px] text-text-tertiary bg-bg-tertiary rounded border border-border font-sans">F</kbd>
           </button>
           <div className="w-[1px] h-3.5 bg-border mx-1"></div>

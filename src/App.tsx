@@ -79,7 +79,7 @@ function App() {
   }
 
   return (
-    <div className="h-full rounded-2xl border border-border shadow-window overflow-hidden backdrop-blur-[40px] backdrop-saturate-[180%] bg-bg-primary animate-scale-in">
+    <div className="h-full rounded-2xl border border-border overflow-hidden backdrop-blur-[40px] backdrop-saturate-[180%] bg-bg-primary animate-scale-in">
       {content}
     </div>
   );

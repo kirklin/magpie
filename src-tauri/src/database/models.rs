@@ -96,7 +96,7 @@ pub struct AppSettings {
     pub max_history_count: i32,         // -1 = unlimited
     pub default_action: String,         // "paste" or "copy"
     pub global_shortcut: String,        // e.g. "CmdOrCtrl+Shift+V"
-    pub excluded_apps: Vec<String>,     // bundle identifiers
+    pub excluded_apps: Vec<String>,     // app ids (see platform::AppInfo::app_id)
     pub theme: String,                  // "system", "dark", "light"
     pub launch_at_login: bool,
     pub move_to_top_on_use: bool,
@@ -111,7 +111,7 @@ impl Default for AppSettings {
             history_retention_days: -1,
             max_history_count: -1,
             default_action: "paste".to_string(),
-            global_shortcut: "CmdOrCtrl+Shift+V".to_string(),
+            global_shortcut: crate::platform::DEFAULT_SHORTCUT.to_string(),
             excluded_apps: vec![],
             theme: "system".to_string(),
             launch_at_login: false,

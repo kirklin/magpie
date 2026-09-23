@@ -1,10 +1,12 @@
 import type { Locale } from "../i18n";
 import type { ClipboardEntry } from "../stores/clipboard";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { homeDir } from "@tauri-apps/api/path";
 import { Pin } from "lucide-react";
 import Prism from "prismjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { t, useLocale, useT } from "../i18n";
+import { basename, dirname, extension, OS } from "../lib/platform";
 import { getTypeLabel } from "../utils/classifier";
 import "prismjs/themes/prism-tomorrow.css";
 
@@ -22,20 +24,21 @@ function escapeHtml(s: string): string {
 type FileCategory = "image" | "video" | "audio" | "pdf" | "text" | "other";
 
 function getFileCategory(filePath: string): FileCategory {
-  const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
-  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".ico", ".svg", ".heic", ".heif", ".avif"].includes(ext)) {
+  const ext = extension(filePath).toLowerCase();
+  if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "ico", "svg", "heic", "heif", "avif"].includes(ext)) {
     return "image";
   }
-  if ([".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"].includes(ext)) {
+  if (["mp4", "mov", "webm", "m4v", "avi", "mkv"].includes(ext)) {
     return "video";
   }
-  if ([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".aiff"].includes(ext)) {
+  if (["mp3", "wav", "m4a", "aac", "ogg", "flac", "aiff"].includes(ext)) {
     return "audio";
   }
-  if (ext === ".pdf") {
+  // WebKitGTK has no built-in PDF viewer, so an inline frame would stay blank.
+  if (ext === "pdf" && OS !== "linux") {
     return "pdf";
   }
-  if ([".txt", ".md", ".json", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".rs", ".py", ".go", ".c", ".cpp", ".h", ".sh", ".yaml", ".yml", ".xml", ".csv", ".log", ".ini", ".conf", ".toml"].includes(ext)) {
+  if (["txt", "md", "json", "js", "ts", "tsx", "jsx", "html", "css", "rs", "py", "go", "c", "cpp", "h", "sh", "yaml", "yml", "xml", "csv", "log", "ini", "conf", "toml"].includes(ext)) {
     return "text";
   }
   return "other";
@@ -45,17 +48,42 @@ function canPreview(filePath: string): boolean {
   return getFileCategory(filePath) !== "other";
 }
 
-function shortenPath(fullPath: string): string {
-  const home = "/Users/";
-  const idx = fullPath.indexOf(home);
-  if (idx === 0) {
-    const afterHome = fullPath.substring(home.length);
-    const slashIdx = afterHome.indexOf("/");
-    if (slashIdx !== -1) {
-      return `~${afterHome.substring(slashIdx)}`;
-    }
+/** Shows the home directory as "~" the way macOS and Linux shells do; Windows paths are shown in full. */
+function shortenPath(fullPath: string, home: string | null): string {
+  if (OS === "windows" || !home) {
+    return fullPath;
+  }
+  if (fullPath === home || fullPath.startsWith(`${home}/`)) {
+    return `~${fullPath.slice(home.length)}`;
   }
   return fullPath;
+}
+
+// The user's home directory, resolved once and shared by every panel.
+let homePath: string | null = null;
+let homePromise: Promise<string> | null = null;
+
+function useHomeDir(): string | null {
+  const [home, setHome] = useState(homePath);
+  useEffect(() => {
+    if (home) {
+      return;
+    }
+    let cancelled = false;
+    homePromise ??= homeDir().then((dir) => {
+      homePath = dir.replace(/[\\/]+$/, "");
+      return homePath;
+    });
+    homePromise.then((dir) => {
+      if (!cancelled) {
+        setHome(dir);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [home]);
+  return home;
 }
 
 function formatFileSize(bytes: number): string {
@@ -158,16 +186,16 @@ function FilePreview({ filePath }: { filePath: string }) {
   }
 }
 
-// Async component to load native app icon from macOS
-function NativeAppIcon({ bundleId, appName }: { bundleId: string; appName: string }) {
+// Async component to load the source app's native icon
+function NativeAppIcon({ appId, appName }: { appId: string; appName: string }) {
   const [iconSrc, setIconSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!bundleId) {
+    if (!appId) {
       return;
     }
     let cancelled = false;
-    invoke<string>("get_app_icon", { bundleId })
+    invoke<string>("get_app_icon", { appId })
       .then((base64) => {
         if (!cancelled) {
           setIconSrc(base64);
@@ -179,7 +207,7 @@ function NativeAppIcon({ bundleId, appName }: { bundleId: string; appName: strin
     return () => {
       cancelled = true;
     };
-  }, [bundleId]);
+  }, [appId]);
 
   if (iconSrc) {
     return <img src={iconSrc} alt={appName} className="w-4 h-4 rounded" />;
@@ -263,7 +291,7 @@ function AssetImage({ filePath, alt = "", className }: { filePath: string; alt?:
   const [failed, setFailed] = useState(false);
 
   if (failed) {
-    const fileName = filePath.split("/").pop() || filePath;
+    const fileName = basename(filePath);
     return (
       <div className="flex flex-col items-center justify-center gap-4">
         <NativeFileIcon filePath={filePath} className="w-32 h-32 drop-shadow-md" />
@@ -292,6 +320,7 @@ interface PreviewPanelProps {
 export function PreviewPanel({ entry }: PreviewPanelProps) {
   const t = useT();
   const locale = useLocale();
+  const home = useHomeDir();
   if (!entry) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
@@ -367,10 +396,10 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                             <NativeFileIcon filePath={filePaths[0]} className="w-32 h-32 drop-shadow-md" />
                             <div className="text-center px-4">
                               <div className="text-[16px] font-medium text-text-primary break-all">
-                                {filePaths[0].split("/").pop() || filePaths[0]}
+                                {basename(filePaths[0])}
                               </div>
                               <div className="text-[12px] text-text-tertiary mt-1 uppercase tracking-widest font-semibold">
-                                {filePaths[0].substring(filePaths[0].lastIndexOf(".") + 1) || "FILE"}
+                                {extension(filePaths[0]) || "FILE"}
                               </div>
                             </div>
                           </div>
@@ -379,14 +408,14 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
                         /* Multiple files: show list with native icons */
                           <div className="space-y-2">
                             {filePaths.map((filePath) => {
-                              const fileName = filePath.split("/").pop() || filePath;
-                              const dirPath = filePath.substring(0, filePath.length - fileName.length);
+                              const fileName = basename(filePath);
+                              const dirPath = dirname(filePath);
                               return (
                                 <div key={filePath} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-bg-secondary">
                                   <NativeFileIcon filePath={filePath} className="w-8 h-8 mt-0.5 shrink-0" />
                                   <div className="min-w-0 flex-1 self-center">
                                     <div className="text-[13px] text-text-primary font-medium truncate">{fileName}</div>
-                                    <div className="text-[11px] text-text-tertiary truncate mt-0.5">{shortenPath(dirPath)}</div>
+                                    <div className="text-[11px] text-text-tertiary truncate mt-0.5">{shortenPath(dirPath, home)}</div>
                                   </div>
                                 </div>
                               );
@@ -511,7 +540,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
               label={t("info.source")}
               value={(
                 <span className="flex items-center gap-1.5">
-                  <NativeAppIcon bundleId={entry.source_app} appName={entry.source_app_name} />
+                  <NativeAppIcon appId={entry.source_app} appName={entry.source_app_name} />
                   {entry.source_app_name}
                 </span>
               )}
@@ -519,7 +548,7 @@ export function PreviewPanel({ entry }: PreviewPanelProps) {
           )}
           <InfoRow label={t("info.content_type")} value={getTypeLabel(entry.content_type, locale)} />
           {isFile && filePaths.length === 1 && (
-            <InfoRow label={t("info.path")} value={shortenPath(filePaths[0])} />
+            <InfoRow label={t("info.path")} value={shortenPath(filePaths[0], home)} />
           )}
           {isFile && filePaths.length > 1 && (
             <InfoRow label={t("info.files")} value={filePaths.length.toString()} />

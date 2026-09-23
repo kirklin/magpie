@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
+import { IS_MAC, isPrimaryModifier, KEY_LABEL } from "../lib/platform";
 
 interface EditContentModalProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
-      } else if (e.key === "s" && e.metaKey) {
+      } else if (e.key === "s" && isPrimaryModifier(e)) {
         e.preventDefault();
         handleSave();
       }
@@ -107,7 +108,7 @@ export function EditContentModal({ isOpen, initialContent, onSave, onClose }: Ed
               disabled={!hasChanged}
             >
               {t("common.save")}
-              <kbd className="ml-1.5 text-[10px] opacity-60">⌘S</kbd>
+              <kbd className="ml-1.5 text-[10px] opacity-60">{IS_MAC ? `${KEY_LABEL.mod}S` : `${KEY_LABEL.mod}+S`}</kbd>
             </button>
           </div>
         </div>

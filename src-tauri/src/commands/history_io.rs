@@ -1,13 +1,11 @@
 //! JSON export/import of the clipboard history, split out of the command god
-//! file. The native save/open dialogs live in clipboard::native.
+//! file. The native save/open dialogs live in `crate::dialogs`.
 
 use tauri::AppHandle;
 use sqlx::Row;
 
 use crate::database::pool::get_pool;
 use crate::error::AppError;
-#[cfg(target_os = "macos")]
-use crate::clipboard::native;
 
 /// Serializable export format for clipboard entries
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -87,21 +85,16 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, AppE
         .map_err(|e| AppError::Other { message: format!("Failed to serialize: {}", e) })?;
 
     // 2. Show native save dialog and write the file to the chosen path.
-    #[cfg(target_os = "macos")]
-    {
-        let default_name = format!(
-            "magpie-export-{}.json",
-            chrono::Local::now().format("%Y%m%d-%H%M%S")
-        );
-        match native::run_save_panel(&app_handle, &default_name) {
-            Some(path) if std::fs::write(&path, &json).is_ok() => Ok(count),
-            _ => Ok(0), // cancelled or write failed
+    let default_name = format!(
+        "magpie-export-{}.json",
+        chrono::Local::now().format("%Y%m%d-%H%M%S")
+    );
+    match crate::dialogs::ask_save_path(&app_handle, &default_name).await? {
+        Some(path) => {
+            std::fs::write(&path, &json)?;
+            Ok(count)
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Err(AppError::Other { message: "Export not supported on this platform".to_string() })
+        None => Ok(0), // cancelled
     }
 }
 
@@ -112,23 +105,12 @@ pub async fn export_clipboard_history(app_handle: AppHandle) -> Result<u32, AppE
 pub async fn import_clipboard_history(app_handle: AppHandle) -> Result<u32, AppError> {
     let loc = crate::i18n::read_locale(&app_handle);
     // 1. Show native open dialog to pick a JSON file and read it.
-    let json_content: String;
-
-    #[cfg(target_os = "macos")]
-    {
-        match native::run_open_panel(&app_handle, crate::i18n::tr(loc, "panel.import_message")) {
-            Some(path) => match std::fs::read_to_string(&path) {
-                Ok(content) => json_content = content,
-                Err(_) => return Ok(0),
-            },
-            None => return Ok(0), // User cancelled
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        return Err(AppError::Other { message: "Import not supported on this platform".to_string() });
-    }
+    let Some(path) =
+        crate::dialogs::ask_open_path(&app_handle, crate::i18n::tr(loc, "panel.import_message")).await?
+    else {
+        return Ok(0); // User cancelled
+    };
+    let json_content = std::fs::read_to_string(&path)?;
 
     // 2. Parse the JSON
     let export_data: ExportData = serde_json::from_str(&json_content)

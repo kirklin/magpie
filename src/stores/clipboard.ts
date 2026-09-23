@@ -27,9 +27,10 @@ interface ClipboardStore {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  activeApp: string;
+  /** Name of the app Magpie pastes into; null when the desktop doesn't reveal it. */
+  activeApp: string | null;
 
-  setActiveApp: (app: string) => void;
+  setActiveApp: (app: string | null) => void;
   setSearchQuery: (query: string) => void;
   setActiveFilter: (filter: string | null) => void;
   setSelectedId: (id: number | null) => void;
@@ -64,7 +65,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   isLoading: false,
   isLoadingMore: false,
   hasMore: true,
-  activeApp: "Active App",
+  activeApp: null,
 
   setActiveApp: app => set({ activeApp: app }),
 

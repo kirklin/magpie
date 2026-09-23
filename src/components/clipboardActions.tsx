@@ -13,9 +13,24 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
+import { IS_MAC, KEY_LABEL } from "../lib/platform";
 
 // Split out of ActionPanel.tsx so that file exports only components — mixing a
 // plain function in there breaks Fast Refresh for the whole module.
+
+type Translate = (key: StringKey, params?: Record<string, string | number>) => string;
+
+/**
+ * Label of the primary (Enter) action: pasting into the named app, or — where
+ * the desktop won't let Magpie type the keystroke — leaving the entry on the
+ * clipboard.
+ */
+export function pasteLabel(t: Translate, canPaste: boolean, activeApp: string | null): string {
+  if (!canPaste) {
+    return t("action.copy_and_hide");
+  }
+  return activeApp ? t("action.paste_to", { app: activeApp }) : t("action.paste");
+}
 
 export interface BuildActionsConfig {
   /** Whether an entry is selected */
@@ -26,10 +41,14 @@ export interface BuildActionsConfig {
     text_content: string | null;
     is_pinned: boolean;
   } | null;
-  /** Name of the active app to paste to */
-  activeApp: string;
+  /** Name of the active app to paste to, when the desktop reveals it */
+  activeApp: string | null;
+  /** Whether this desktop lets Magpie type the paste keystroke */
+  canPaste: boolean;
+  /** Whether this desktop lets Magpie paste while its window stays open */
+  canKeepWindow: boolean;
   /** Translator (from useT) for action labels */
-  t: (key: StringKey, params?: Record<string, string | number>) => string;
+  t: Translate;
   /** Callbacks */
   onPaste: () => void;
   onCopy: () => void;
@@ -51,6 +70,7 @@ export interface BuildActionsConfig {
  */
 export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGroup[] {
   const { t } = config;
+  const k = KEY_LABEL;
   const groups: ActionGroup[] = [];
 
   if (config.hasEntry && config.entry) {
@@ -62,37 +82,39 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
     const pasteActions: Action[] = [
       {
         id: "paste",
-        label: t("action.paste_to", { app: config.activeApp }),
+        label: pasteLabel(t, config.canPaste, config.activeApp),
         icon: <img src="/logo.png" alt="Magpie" className="w-[14px] h-[14px] object-contain rounded-[3px]" />,
-        shortcut: ["↵"],
+        shortcut: [k.enter],
         onAction: config.onPaste,
       },
       {
         id: "copy",
         label: t("action.copy"),
         icon: <Copy size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "↵"],
+        shortcut: [k.mod, k.enter],
         onAction: config.onCopy,
       },
     ];
 
-    if (isText) {
+    if (isText && config.canPaste) {
       pasteActions.push({
         id: "paste-plain",
         label: t("action.paste_plain"),
         icon: <Type size={14} className="text-text-secondary" />,
-        shortcut: ["⇧", "↵"],
+        shortcut: [k.shift, k.enter],
         onAction: config.onPastePlainText,
       });
     }
 
-    pasteActions.push({
-      id: "paste-keep-window",
-      label: t("action.paste_keep"),
-      icon: <ClipboardPaste size={14} className="text-text-secondary" />,
-      shortcut: ["⌥", "↵"],
-      onAction: config.onPasteKeepWindow,
-    });
+    if (config.canKeepWindow) {
+      pasteActions.push({
+        id: "paste-keep-window",
+        label: t("action.paste_keep"),
+        icon: <ClipboardPaste size={14} className="text-text-secondary" />,
+        shortcut: [k.alt, k.enter],
+        onAction: config.onPasteKeepWindow,
+      });
+    }
 
     groups.push({ actions: pasteActions });
 
@@ -104,7 +126,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
         id: "open-url",
         label: t("action.open_browser"),
         icon: <ExternalLink size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "O"],
+        shortcut: [k.mod, "O"],
         onAction: config.onOpenUrl,
       });
     }
@@ -114,7 +136,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
         id: "append",
         label: t("action.append"),
         icon: <ListPlus size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "⌥", "C"],
+        shortcut: [k.mod, k.alt, "C"],
         onAction: config.onAppendToClipboard,
       });
     }
@@ -124,7 +146,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
         id: "edit-content",
         label: t("action.edit"),
         icon: <Pencil size={14} className="text-text-secondary" />,
-        shortcut: ["⌘", "E"],
+        shortcut: [k.mod, "E"],
         onAction: config.onEditContent,
       });
     }
@@ -133,7 +155,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       id: "pin",
       label: isPinned ? t("action.unpin") : t("action.pin"),
       icon: isPinned ? <PinOff size={14} className="text-text-secondary" /> : <Pin size={14} className="text-text-secondary" />,
-      shortcut: ["⌘", "."],
+      shortcut: [k.mod, "."],
       onAction: config.onTogglePin,
     });
 
@@ -141,7 +163,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
       id: "save-as-file",
       label: t("action.save_file"),
       icon: <FileDown size={14} className="text-text-secondary" />,
-      shortcut: ["⌘", "S"],
+      shortcut: [k.mod, "S"],
       onAction: config.onSaveAsFile,
     });
 
@@ -154,7 +176,7 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
           id: "delete",
           label: t("action.delete"),
           icon: <Trash2 size={14} />,
-          shortcut: ["⌘", "⌫"],
+          shortcut: [k.mod, k.backspace],
           danger: true,
           onAction: config.onDelete,
         },
@@ -169,7 +191,8 @@ export function buildClipboardActionGroups(config: BuildActionsConfig): ActionGr
         id: "clear",
         label: t("action.clear_all"),
         icon: <Eraser size={14} />,
-        shortcut: ["⇧", "⌘", "⌫"],
+        // Each OS's own modifier order: ⇧⌘ on macOS, Ctrl+Shift elsewhere.
+        shortcut: IS_MAC ? [k.shift, k.mod, k.backspace] : [k.mod, k.shift, k.backspace],
         danger: true,
         onAction: config.onClearHistory,
       },

@@ -27,61 +27,33 @@ pub fn set_tray_visible(app_handle: tauri::AppHandle, visible: bool) -> Result<(
 #[tauri::command]
 #[specta::specta]
 pub fn relocalize_menus(app_handle: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
     crate::menu::apply_locale(&app_handle);
-    crate::tray::apply_locale(&app_handle);
+    crate::tray::rebuild_menu(&app_handle);
 }
 
-/// Default global shortcut, used as a fallback so the app is never left
-/// without a working hotkey.
-const DEFAULT_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
-
-/// Re-register the global shortcut at runtime.
-///
-/// The new shortcut is validated (parsed) BEFORE the old one is unregistered,
-/// so an invalid value can never leave the app with no shortcut. If a
-/// valid-but-unregisterable combination (e.g. already held by another app)
-/// fails to bind, we fall back to the default shortcut and return an error.
+/// Re-register the global shortcut at runtime. An invalid or unregisterable
+/// shortcut is rejected, and the app keeps a working one.
 #[tauri::command]
 #[specta::specta]
 pub fn update_global_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), AppError> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+    crate::shortcut::replace(&app_handle, &shortcut).map_err(|message| AppError::Validation { message })
+}
 
-    let global_shortcut = app_handle.global_shortcut();
-    let loc = crate::i18n::read_locale(&app_handle);
+/// How the global shortcut is bound on this desktop: recorded in Magpie, owned
+/// by the desktop, or to be set up by the user in the desktop's settings.
+#[tauri::command]
+#[specta::specta]
+pub fn get_shortcut_binding(app_handle: tauri::AppHandle) -> crate::shortcut::ShortcutBinding {
+    crate::shortcut::binding(&app_handle)
+}
 
-    // Validate the format first — no side effects if this fails.
-    let parsed: Shortcut = shortcut
-        .parse()
-        .map_err(|_| AppError::Validation {
-            message: format!("{}{}", crate::i18n::tr(loc, "err.shortcut_invalid"), shortcut),
-        })?;
-
-    // Now it's safe to drop the old binding and install the new one.
-    global_shortcut
-        .unregister_all()
-        .map_err(|e| AppError::Other { message: format!("Failed to unregister shortcuts: {}", e) })?;
-
-    let handle = app_handle.clone();
-    let register = global_shortcut.on_shortcut(parsed, move |_app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            crate::toggle_window(&handle);
-        }
-    });
-
-    if let Err(e) = register {
-        // Valid format but could not be registered. Restore a working hotkey.
-        log::error!("Failed to register '{}': {}; falling back to default", shortcut, e);
-        let handle = app_handle.clone();
-        let _ = global_shortcut.on_shortcut(DEFAULT_SHORTCUT, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                crate::toggle_window(&handle);
-            }
-        });
-        return Err(AppError::Validation {
-            message: format!("{}'{}': {}", crate::i18n::tr(loc, "err.shortcut_register_failed"), shortcut, e),
-        });
-    }
-
-    log::info!("Global shortcut updated to: {}", shortcut);
-    Ok(())
+/// Open the desktop's own dialog for changing the global shortcut.
+#[tauri::command]
+#[specta::specta]
+pub async fn configure_system_shortcut(app_handle: tauri::AppHandle) -> Result<(), AppError> {
+    tokio::task::spawn_blocking(move || crate::shortcut::configure_in_desktop(&app_handle))
+        .await
+        .map_err(|e| AppError::Other { message: e.to_string() })?
+        .map_err(AppError::from)
 }

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { IS_MAC, KEY_LABEL } from "../../lib/platform";
 
 interface ShortcutRecorderProps {
   label: string;
@@ -87,11 +88,11 @@ const KEY_DISPLAY: Record<string, string> = {
   Left: "←",
   Right: "→",
   Space: "Space",
-  Backspace: "⌫",
-  Delete: "⌦",
-  Enter: "↩",
-  Tab: "⇥",
-  Escape: "⎋",
+  Backspace: KEY_LABEL.backspace,
+  Delete: KEY_LABEL.delete,
+  Enter: IS_MAC ? "↩" : "Enter",
+  Tab: KEY_LABEL.tab,
+  Escape: KEY_LABEL.escape,
 };
 
 function formatShortcutDisplay(shortcut: string): string[] {
@@ -100,18 +101,24 @@ function formatShortcutDisplay(shortcut: string): string[] {
   for (const part of parts) {
     switch (part) {
       case "CmdOrCtrl":
+        symbols.push(KEY_LABEL.mod);
+        break;
       case "Cmd":
-        symbols.push("⌘");
+      case "Command":
+      case "Super":
+      case "Meta":
+        symbols.push(KEY_LABEL.super);
         break;
       case "Ctrl":
-        symbols.push("⌃");
+      case "Control":
+        symbols.push(KEY_LABEL.ctrl);
         break;
       case "Shift":
-        symbols.push("⇧");
+        symbols.push(KEY_LABEL.shift);
         break;
       case "Alt":
       case "Option":
-        symbols.push("⌥");
+        symbols.push(KEY_LABEL.alt);
         break;
       default:
         symbols.push(KEY_DISPLAY[part] ?? part);
@@ -138,9 +145,15 @@ function keyEventToShortcut(e: KeyboardEvent): string | null {
   if (modifierCodes.has(e.code)) {
     return null;
   }
+  // CmdOrCtrl is ⌘ on macOS and Ctrl elsewhere; the remaining one of the two
+  // (⌃ on macOS, the Windows/Super key elsewhere) keeps its own name.
   const parts: string[] = [];
-  if (e.metaKey || e.ctrlKey) {
+  const [primary, secondary] = IS_MAC ? [e.metaKey, e.ctrlKey] : [e.ctrlKey, e.metaKey];
+  if (primary) {
     parts.push("CmdOrCtrl");
+  }
+  if (secondary) {
+    parts.push(IS_MAC ? "Ctrl" : "Super");
   }
   if (e.altKey) {
     parts.push("Alt");
@@ -213,9 +226,9 @@ function RecordingPopover({
         {/* Example hint */}
         <div className="flex items-center justify-center gap-1.5 px-4 pt-3 pb-1.5">
           <span className="text-[11px] text-text-tertiary mr-1">e.g.</span>
-          <KeyCap>⇧</KeyCap>
-          <KeyCap>⌘</KeyCap>
-          <KeyCap>Space</KeyCap>
+          {(IS_MAC ? [KEY_LABEL.shift, KEY_LABEL.mod, "Space"] : [KEY_LABEL.ctrl, KEY_LABEL.alt, "V"]).map(key => (
+            <KeyCap key={key}>{key}</KeyCap>
+          ))}
         </div>
 
         {/* Recording label */}

@@ -36,12 +36,15 @@ export const commands = {
   updateEntryContent: (id: number, content: string) => typedError<null, AppError>(__TAURI_INVOKE("update_entry_content", { id, content })),
   /**  Append text to the current clipboard content */
   appendToClipboard: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("append_to_clipboard", { text })),
-  /**  Save clipboard entry content to a file using a native save dialog */
+  /**
+   *  Save clipboard entry content to a file using a native save dialog.
+   *  Returns false when the user cancelled.
+   */
   saveEntryAsFile: (content: string, defaultName: string) => typedError<boolean, AppError>(__TAURI_INVOKE("save_entry_as_file", { content, defaultName })),
   /**
    *  Paste content to the target app while keeping the Magpie window visible.
    *  Activates the target app (window stays on screen due to always_on_top),
-   *  simulates Cmd+V, then re-focuses Magpie.
+   *  simulates ⌘/Ctrl+V, then re-focuses Magpie.
    */
   pasteAndKeepWindow: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("paste_and_keep_window", { text })),
   /**  Paste an image entry while keeping the Magpie window visible. */
@@ -60,14 +63,17 @@ export const commands = {
   importClipboardHistory: () => typedError<number, AppError>(__TAURI_INVOKE("import_clipboard_history")),
   getDefaultSettings: () => __TAURI_INVOKE<AppSettings>("get_default_settings"),
   /**
-   *  Re-register the global shortcut at runtime.
-   *
-   *  The new shortcut is validated (parsed) BEFORE the old one is unregistered,
-   *  so an invalid value can never leave the app with no shortcut. If a
-   *  valid-but-unregisterable combination (e.g. already held by another app)
-   *  fails to bind, we fall back to the default shortcut and return an error.
+   *  Re-register the global shortcut at runtime. An invalid or unregisterable
+   *  shortcut is rejected, and the app keeps a working one.
    */
   updateGlobalShortcut: (shortcut: string) => typedError<null, AppError>(__TAURI_INVOKE("update_global_shortcut", { shortcut })),
+  /**
+   *  How the global shortcut is bound on this desktop: recorded in Magpie, owned
+   *  by the desktop, or to be set up by the user in the desktop's settings.
+   */
+  getShortcutBinding: () => __TAURI_INVOKE<ShortcutBinding>("get_shortcut_binding"),
+  /**  Open the desktop's own dialog for changing the global shortcut. */
+  configureSystemShortcut: () => typedError<null, AppError>(__TAURI_INVOKE("configure_system_shortcut")),
   /**  Show or hide the menu bar tray icon at runtime. */
   setTrayVisible: (visible: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_tray_visible", { visible })),
   /**
@@ -76,9 +82,22 @@ export const commands = {
    *  menus switch language without requiring a restart.
    */
   relocalizeMenus: () => __TAURI_INVOKE<void>("relocalize_menus"),
-  /**  Get the app icon as a base64-encoded PNG string for a given bundle ID */
-  getAppIcon: (bundleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { bundleId })),
+  /**
+   *  Get the icon of an application as a PNG data URL. `app_id` is the
+   *  entry's `source_app`: a bundle id (macOS), an executable path (Windows) or a
+   *  desktop entry id (Linux).
+   */
+  getAppIcon: (appId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_app_icon", { appId })),
+  /**
+   *  Get the icon the system file browser shows for `file_path`, as a PNG data
+   *  URL. Not cached here: the frontend keeps its own per-path cache.
+   */
   getFileIcon: (filePath: string) => typedError<string, AppError>(__TAURI_INVOKE("get_file_icon", { filePath })),
+  /**
+   *  What paste-back can do on this OS and desktop, so the UI only offers
+   *  actions that work.
+   */
+  getPasterCapabilities: () => __TAURI_INVOKE<PasterCapabilities>("get_paster_capabilities"),
   /**  Hide the main window */
   hideWindow: () => __TAURI_INVOKE<void>("hide_window"),
 };
@@ -142,6 +161,45 @@ export interface ClipboardQuery {
   limit: number;
   offset: number;
 }
+
+/**  What a platform's paster can actually do, so the UI can degrade honestly. */
+export interface PasterCapabilities {
+  /**  A paste keystroke can be synthesized into the focused app. */
+  can_paste: boolean;
+  /**
+   *  Another application can be brought to the foreground, which "paste and
+   *  keep window open" needs.
+   */
+  can_activate_app: boolean;
+  /**  The focused window can be read, so the UI can name the paste target. */
+  can_read_focus: boolean;
+}
+
+/**
+ *  How the toggle shortcut is bound on this desktop, for the settings screen.
+ *  The desktop-owned variants only occur on Linux but belong to the shared
+ *  IPC type.
+ */
+export type ShortcutBinding
+/**  Magpie registers the shortcut itself; the user records it in Settings. */
+  = { kind: "native" }
+/**  The desktop owns the shortcut (Wayland GlobalShortcuts portal). */
+    | { kind: "portal";
+      /**  The trigger as the desktop words it, once assigned. */
+      trigger: string | null;
+      /**  Whether the desktop can open its own dialog to change it. */
+      can_configure: boolean;
+      /**
+       *  What a shortcut bound in the desktop's keyboard settings runs, for
+       *  desktops whose portal leaves the key unassigned (Hyprland, niri) or
+       *  when the user declined the desktop's prompt.
+       */
+      command: string; }
+/**
+ *  Nothing can register a shortcut for Magpie: bind one to `command` in
+ *  the desktop's keyboard settings.
+ */
+      | { kind: "manual"; command: string };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

@@ -75,6 +75,30 @@ pub fn tr(locale: Locale, key: &str) -> &'static str {
         ),
         // error message prefixes / standalone messages
         "err.no_accessibility" => pick!("缺少辅助功能权限，无法模拟粘贴", "Missing Accessibility permission; can't synthesize paste"),
+        "err.keep_window_unsupported" => pick!(
+            "当前桌面环境不支持粘贴后保持窗口打开",
+            "This desktop doesn't support pasting while keeping the window open"
+        ),
+        "err.no_previous_app" => pick!("没有可以粘贴到的应用", "There's no app to paste into"),
+        "err.activate_failed" => pick!("无法切换到 ", "Couldn't switch to "),
+        "err.paste_unsupported" => pick!(
+            "当前桌面环境不允许应用模拟按键。内容已复制到剪贴板，请按 Ctrl+V 粘贴。",
+            "This desktop doesn't let apps type for you. The content is on the clipboard; press Ctrl+V to paste."
+        ),
+        "err.paste_denied" => pick!(
+            "Magpie 未获准模拟按键。内容已复制到剪贴板，请按 Ctrl+V 粘贴。",
+            "Magpie wasn't allowed to type for you. The content is on the clipboard; press Ctrl+V to paste."
+        ),
+        "err.shortcut_owned_by_desktop" => pick!(
+            "快捷键由桌面环境管理，请在系统设置中修改",
+            "The desktop manages this shortcut; change it in the system settings"
+        ),
+        "err.shortcut_not_configurable" => pick!(
+            "当前桌面环境无法从 Magpie 打开快捷键设置",
+            "This desktop can't open its shortcut settings from Magpie"
+        ),
+        // global shortcut (as the desktop lists it)
+        "shortcut.toggle_description" => pick!("打开或隐藏 Magpie", "Show or hide Magpie"),
         "err.shortcut_invalid" => pick!("快捷键格式无效: ", "Invalid shortcut format: "),
         "err.shortcut_register_failed" => pick!("无法注册快捷键 ", "Couldn't register shortcut "),
         "err.import_parse_failed" => pick!("无法解析导入文件: ", "Couldn't parse the import file: "),

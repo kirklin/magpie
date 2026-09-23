@@ -1,9 +1,8 @@
 //! macOS platform adapters.
 //!
 //! All the NSPasteboard / AppKit / CoreGraphics FFI and the main-thread
-//! dispatch it requires — previously scattered across
-//! `clipboard/{monitor,native,paste}.rs` — lives here, behind the
-//! [`Clipboard`] and [`Paster`] ports.
+//! dispatch it requires lives here, behind the [`Clipboard`], [`Paster`] and
+//! [`Icons`] ports.
 
 use std::sync::mpsc;
 use std::time::Duration;
@@ -11,7 +10,9 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use super::{AppInfo, Captured, Clipboard, Paster, PasterCapabilities, WritePayload};
+use super::{
+    AppInfo, Captured, Clipboard, FocusedWindow, Icons, Paster, PasterCapabilities, WritePayload,
+};
 
 // ---------------------------------------------------------------------------
 // Clipboard
@@ -32,7 +33,7 @@ impl Clipboard for MacClipboard {
         current_change_count(&self.app)
     }
 
-    fn read(&self) -> Option<Captured> {
+    fn read(&self) -> Result<Option<Captured>, String> {
         let app = &self.app;
 
         // Respect the de-facto-standard "concealed/transient" pasteboard markers
@@ -40,19 +41,19 @@ impl Clipboard for MacClipboard {
         // sensitive, short-lived content.
         if pasteboard_is_concealed(app) {
             log::debug!("Skipping concealed/transient pasteboard content");
-            return None;
+            return Ok(None);
         }
 
         // File URLs take priority (a file copy also exposes a text flavor).
         let file_paths = read_file_urls_from_pasteboard(app);
         if !file_paths.is_empty() {
-            return Some(Captured::Files { paths: file_paths });
+            return Ok(Some(Captured::Files { paths: file_paths }));
         }
 
         // Plain text.
         if let Ok(text) = app.clipboard().read_text() {
             if !text.is_empty() {
-                return Some(Captured::Text { text, html: None });
+                return Ok(Some(Captured::Text { text, html: None }));
             }
         }
 
@@ -60,9 +61,9 @@ impl Clipboard for MacClipboard {
         // representation (some editors / web apps): capture the HTML and keep a
         // stripped plain-text version for display/search.
         if let Some(html) = read_html_from_pasteboard(app) {
-            let plain = html_to_plain_text(&html);
+            let plain = super::html_to_plain_text(&html);
             if !plain.is_empty() {
-                return Some(Captured::Text { text: plain, html: Some(html) });
+                return Ok(Some(Captured::Text { text: plain, html: Some(html) }));
             }
         }
 
@@ -70,16 +71,16 @@ impl Clipboard for MacClipboard {
         if let Ok(image) = app.clipboard().read_image() {
             let rgba = image.rgba().to_vec();
             if !rgba.is_empty() {
-                return Some(Captured::Image {
+                return Ok(Some(Captured::Image {
                     rgba,
                     width: image.width(),
                     height: image.height(),
-                });
+                }));
             }
         }
 
         log::debug!("Pasteboard changed but no recognizable content found");
-        None
+        Ok(None)
     }
 
     fn write(&self, payload: &WritePayload) -> Result<(), String> {
@@ -268,23 +269,6 @@ fn read_html_from_pasteboard(app_handle: &AppHandle) -> Option<String> {
     rx.recv_timeout(Duration::from_millis(150)).ok().flatten()
 }
 
-/// Strip HTML markup down to a readable plain-text approximation.
-fn html_to_plain_text(html: &str) -> String {
-    use regex::Regex;
-
-    // Drop <script>/<style> blocks entirely, then all remaining tags.
-    let re = Regex::new(r"(?is)<(script|style)\b[^>]*>.*?</(script|style)>|<[^>]+>").unwrap();
-    let stripped = re.replace_all(html, " ");
-    let decoded = stripped
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'");
-    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 /// Read a PNG file and write it to the general pasteboard, dispatched to the
 /// main thread (NSPasteboard is not thread-safe).
 fn write_png_to_pasteboard(app_handle: &AppHandle, image_path: &str) -> Result<(), String> {
@@ -371,6 +355,30 @@ impl MacPaster {
 }
 
 impl Paster for MacPaster {
+    fn focused_window(&self) -> FocusedWindow {
+        let (tx, rx) = mpsc::channel();
+        let dispatched = self.app.run_on_main_thread(move || {
+            use objc2::rc::autoreleasepool;
+            use objc2_app_kit::NSWorkspace;
+
+            let pid = autoreleasepool(|_| {
+                NSWorkspace::sharedWorkspace()
+                    .frontmostApplication()
+                    .map(|app| app.processIdentifier())
+                    .filter(|pid| *pid > 0)
+                    .map(|pid| pid as u32)
+            });
+            let _ = tx.send(pid);
+        });
+
+        if dispatched.is_err() {
+            return FocusedWindow::default();
+        }
+        // Bounded wait: never hang the caller if the main thread is busy.
+        let pid = rx.recv_timeout(Duration::from_millis(200)).ok().flatten();
+        FocusedWindow { pid, window: None }
+    }
+
     fn frontmost_app(&self) -> AppInfo {
         let (tx, rx) = mpsc::channel();
 
@@ -381,11 +389,18 @@ impl Paster for MacPaster {
             let result = autoreleasepool(|_| {
                 let workspace = NSWorkspace::sharedWorkspace();
                 if let Some(app) = workspace.frontmostApplication() {
-                    let bundle_id = app.bundleIdentifier().map(|s| s.to_string());
-                    let name = app.localizedName().map(|s| s.to_string());
-                    (bundle_id, name)
+                    AppInfo {
+                        app_id: app.bundleIdentifier().map(|s| s.to_string()),
+                        name: app.localizedName().map(|s| s.to_string()),
+                        focus: FocusedWindow {
+                            pid: Some(app.processIdentifier())
+                                .filter(|pid| *pid > 0)
+                                .map(|pid| pid as u32),
+                            window: None,
+                        },
+                    }
                 } else {
-                    (None, None)
+                    AppInfo::default()
                 }
             });
             let _ = tx.send(result);
@@ -396,34 +411,32 @@ impl Paster for MacPaster {
         }
 
         // Bounded wait: never hang the caller if the main thread is busy.
-        let (bundle_id, name) = rx
-            .recv_timeout(Duration::from_millis(200))
-            .unwrap_or((None, None));
-        AppInfo { bundle_id, name }
+        rx.recv_timeout(Duration::from_millis(200)).unwrap_or_default()
     }
 
-    fn activate_app(&self, app_id: &str) -> bool {
+    fn activate(&self, target: &AppInfo) -> bool {
         use objc2_app_kit::NSRunningApplication;
         use objc2_foundation::NSString;
 
-        let bid = app_id.to_string();
+        let bundle_id = target.app_id.clone();
+        let pid = target.focus.pid;
         let (tx, rx) = mpsc::channel();
         let dispatched = self.app.run_on_main_thread(move || {
-            let ns_bid = NSString::from_str(&bid);
-            let apps =
-                unsafe { NSRunningApplication::runningApplicationsWithBundleIdentifier(&ns_bid) };
-            let activated = if apps.count() > 0 {
-                let app = unsafe { apps.objectAtIndex(0) };
-                #[allow(deprecated)]
-                let _ = unsafe {
-                    app.activateWithOptions(
-                        objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-                    )
-                };
-                true
-            } else {
-                false
-            };
+            // Prefer the exact process that was frontmost; the bundle id covers
+            // an app that was relaunched in between.
+            let app = pid
+                .and_then(|pid| NSRunningApplication::runningApplicationWithProcessIdentifier(pid as i32))
+                .or_else(|| {
+                    let ns_bid = NSString::from_str(bundle_id.as_deref()?);
+                    let apps = NSRunningApplication::runningApplicationsWithBundleIdentifier(&ns_bid);
+                    (apps.count() > 0).then(|| apps.objectAtIndex(0))
+                });
+            #[allow(deprecated)]
+            let activated = app.is_some_and(|app| {
+                app.activateWithOptions(
+                    objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+                )
+            });
             let _ = tx.send(activated);
         });
 
@@ -431,6 +444,20 @@ impl Paster for MacPaster {
             return false;
         }
         rx.recv_timeout(Duration::from_millis(300)).unwrap_or(false)
+    }
+
+    fn hide_and_restore_focus(&self, _previous: Option<&AppInfo>) -> Result<(), String> {
+        // Hiding the whole application makes macOS re-activate whichever app
+        // was active before it, which is exactly the one Magpie was summoned
+        // from.
+        self.app.hide().map_err(|e| e.to_string())
+    }
+
+    fn refocus_magpie(&self) {
+        use tauri::Manager;
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.set_focus();
+        }
     }
 
     fn paste(&self) -> Result<(), String> {
@@ -459,6 +486,7 @@ impl Paster for MacPaster {
         PasterCapabilities {
             can_paste: true,
             can_activate_app: true,
+            can_read_focus: true,
         }
     }
 }
@@ -501,4 +529,155 @@ fn simulate_paste_keystroke() {
     key_up.post(core_graphics::event::CGEventTapLocation::HID);
 
     log::debug!("[Paste] Simulated Cmd+V via CGEvent");
+}
+
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
+pub struct MacIcons;
+
+impl Icons for MacIcons {
+    fn app_icon(&self, app_id: &str) -> Result<String, String> {
+        use objc2_app_kit::NSWorkspace;
+        use objc2_foundation::NSString;
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let ns_bundle_id = NSString::from_str(app_id);
+        let url = workspace
+            .URLForApplicationWithBundleIdentifier(&ns_bundle_id)
+            .ok_or_else(|| format!("App not found: {}", app_id))?;
+        let path = url.path().ok_or("No path for app URL")?;
+        fetch_icon_for_path(&path, 32.0)
+    }
+
+    fn file_icon(&self, path: &str) -> Result<String, String> {
+        use objc2_foundation::NSString;
+        // A larger size than app icons: file icons also fill the preview panel.
+        fetch_icon_for_path(&NSString::from_str(path), 128.0)
+    }
+}
+
+/// Render the icon for `path` as a base64 PNG data URL.
+///
+/// The whole body runs inside an `autoreleasepool`, and that is load-bearing
+/// rather than tidiness. Every step here hands back an autoreleased object:
+/// `iconForFile:` returns an NSImage carrying EVERY representation of the icon
+/// (16pt through 1024pt), and `TIFFRepresentation` serializes all of them into
+/// one UNCOMPRESSED NSData — megabytes per call. Tauri commands run on runtime
+/// worker threads that have no pool of their own, so without this those objects
+/// were never released: scrolling the history once leaked hundreds of MB into
+/// the Foundation zone, and it never came back. `get_file_icon` deliberately
+/// has no Rust-side cache, so it is called for every distinct file path, which
+/// is what turned the leak into gigabytes.
+fn fetch_icon_for_path(path: &objc2_foundation::NSString, size: f64) -> Result<String, String> {
+    use objc2::rc::autoreleasepool;
+
+    autoreleasepool(|_| {
+        use objc2::rc::Retained;
+        use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+        use objc2_foundation::NSData;
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let icon = workspace.iconForFile(path);
+
+        // Set a reasonable size for the icon. This shrinks what gets drawn, but
+        // NOT what TIFFRepresentation serializes below — hence the pool.
+        icon.setSize(objc2_foundation::NSSize::new(size, size));
+
+        let tiff_data: Retained<NSData> = icon
+            .TIFFRepresentation()
+            .ok_or("Failed to get TIFF representation")?;
+        let bitmap_rep = NSBitmapImageRep::imageRepWithData(&tiff_data)
+            .ok_or("Failed to create bitmap rep")?;
+        let png_data = unsafe {
+            bitmap_rep.representationUsingType_properties(
+                NSBitmapImageFileType::PNG,
+                &objc2_foundation::NSDictionary::new(),
+            )
+        }
+        .ok_or("Failed to convert to PNG")?;
+
+        // Copy the bytes out BEFORE the pool drains — png_data dies with it.
+        Ok(super::png_data_url(&png_data.to_vec()))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Resident set size of this process, in MB.
+    fn rss_mb() -> u64 {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .expect("ps");
+        String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
+    }
+
+    /// Byte-for-byte what `fetch_icon_for_path` does, minus the autoreleasepool.
+    /// Exists purely so the test can A/B the pool against its absence in ONE
+    /// process — comparing across runs is too noisy to prove anything.
+    fn fetch_icon_unpooled(path: &objc2_foundation::NSString, size: f64) -> Result<String, String> {
+        use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let icon = workspace.iconForFile(path);
+        icon.setSize(objc2_foundation::NSSize::new(size, size));
+        let tiff_data = icon.TIFFRepresentation().ok_or("no tiff")?;
+        let bitmap_rep = NSBitmapImageRep::imageRepWithData(&tiff_data).ok_or("no rep")?;
+        let png_data = unsafe {
+            bitmap_rep.representationUsingType_properties(
+                NSBitmapImageFileType::PNG,
+                &objc2_foundation::NSDictionary::new(),
+            )
+        }
+        .ok_or("no png")?;
+        Ok(super::super::png_data_url(&png_data.to_vec()))
+    }
+
+    /// Icon fetching must not grow memory without bound.
+    ///
+    /// `fetch_icon_for_path` builds an NSImage holding every representation of
+    /// the icon and serializes all of them into one uncompressed TIFF. Without
+    /// an `autoreleasepool` around it those objects are never released on a
+    /// Tauri worker thread, and repeated calls (one per distinct file path in
+    /// the history list, uncached by design) grow the Foundation zone into the
+    /// gigabytes. Ignored by default: it measures process RSS, so it is timing
+    /// and machine dependent rather than a clean unit assertion.
+    ///
+    /// Run with: cargo test --lib icon_fetch_does_not_leak -- --ignored --nocapture
+    #[test]
+    #[ignore = "measures process RSS; run explicitly"]
+    fn icon_fetch_does_not_leak() {
+        const N: usize = 400;
+        let path = objc2_foundation::NSString::from_str("/Applications");
+
+        // Warm up so first-call initialization counts against neither variant.
+        for _ in 0..50 {
+            let _ = fetch_icon_for_path(&path, 128.0);
+        }
+
+        let base = rss_mb();
+        for _ in 0..N {
+            let _ = fetch_icon_unpooled(&path, 128.0);
+        }
+        let unpooled = rss_mb().saturating_sub(base);
+
+        // Reclaim what the unpooled run stranded, so the pooled measurement
+        // starts from a settled baseline rather than inheriting that growth.
+        objc2::rc::autoreleasepool(|_| {});
+        let base = rss_mb();
+        for _ in 0..N {
+            let _ = fetch_icon_for_path(&path, 128.0);
+        }
+        let pooled = rss_mb().saturating_sub(base);
+
+        println!("over {N} icon fetches — without pool: +{unpooled} MB, with pool: +{pooled} MB");
+        assert!(
+            pooled < 50,
+            "pooled icon fetching still grew {pooled} MB over {N} calls"
+        );
+    }
 }

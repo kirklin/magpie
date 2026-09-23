@@ -1,7 +1,7 @@
 [package]
 name = "magpie"
 version = "0.6.5"
-description = "A smart clipboard manager for macOS"
+description = "A smart clipboard manager for macOS, Windows and Linux"
 authors = ["Kirk Lin"]
 license = "GPL-3.0-only"
 edition = "2024"
@@ -41,6 +41,7 @@ tauri-plugin-fs = "2.5.1"
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-positioner = "2.3.1"
 tauri-plugin-single-instance = "2.4.2"
+tauri-plugin-dialog = "2.7.3"
 tokio = { version = "1.52.1", features = [ "full" ] }
 chrono = { version = "0.4.44", features = [ "serde" ] }
 regex = "1.12.3"
@@ -48,8 +49,20 @@ sha2 = "0.11.0"
 hex = "0.4.3"
 png = "0.17"
 log = "0.4.29"
+sqlx = { version = "0.8.6", features = [
+  "runtime-tokio",
+  "sqlite"
+] }
+env_logger = "0.11.10"
+dirs = "6.0.0"
+thiserror = "2"
+specta = { version = "2.0.0-rc.25", default-features = false, features = ["derive"] }
+specta-typescript = "0.0.12"
+tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", features = ["NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSRunningApplication", "NSImage", "NSBitmapImageRep", "NSImageRep", "NSGraphicsContext", "NSSavePanel", "NSOpenPanel", "NSPanel", "NSApplication"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSRunningApplication", "NSImage", "NSBitmapImageRep", "NSImageRep", "NSGraphicsContext", "NSApplication"] }
 objc2-foundation = { version = "0.3.2", features = [
   "NSString",
   "NSArray",
@@ -59,18 +72,39 @@ objc2-foundation = { version = "0.3.2", features = [
   "NSObject",
   "NSDictionary"
 ] }
-sqlx = { version = "0.8.6", features = [
-  "runtime-tokio",
-  "sqlite"
-] }
-env_logger = "0.11.10"
 core-graphics = "0.25.0"
-dirs = "6.0.0"
 core-foundation = "0.10.1"
-thiserror = "2"
-specta = { version = "2.0.0-rc.25", default-features = false, features = ["derive"] }
-specta-typescript = "0.0.12"
-tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13.13", default-features = false, features = ["tokio", "global_shortcuts", "remote_desktop", "screencast"] }
+futures-util = "0.3.31"
+gio = "0.18.4"
+glib = "0.18.5"
+gtk = "0.18.2"
+rustix = { version = "1.1.4", features = ["fs"] }
+wayland-client = "0.31.15"
+wayland-protocols = { version = "0.32.13", features = ["client", "staging"] }
+wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
+x11rb = { version = "0.13.2", features = ["xfixes", "xtest"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+clipboard-win = { version = "5.4.1", features = ["std"] }
+windows = { version = "0.61.3", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_DataExchange",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging"
+] }
 
 [profile.release]
 codegen-units = 1

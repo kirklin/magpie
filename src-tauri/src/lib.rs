@@ -1,24 +1,50 @@
 mod clipboard;
 mod commands;
 mod database;
+mod dialogs;
 mod error;
 mod i18n;
+#[cfg(target_os = "macos")]
 mod menu;
 mod platform;
+mod shortcut;
 mod tray;
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use clipboard::monitor::ClipboardMonitorState;
 use database::repository::get_migrations;
+use platform::{AppInfo, PasterPort};
 use tauri::{Manager, Emitter};
 
-/// Stores the bundle ID of the app that was active before Magpie was shown.
-pub struct PreviousAppBundleId(pub Mutex<Option<String>>);
+/// The application that was frontmost when Magpie was last shown: where pastes
+/// go back to.
+pub struct PreviousApp(Mutex<Option<AppInfo>>);
+
+impl PreviousApp {
+    pub fn get(&self) -> Option<AppInfo> {
+        self.0.lock().expect("previous-app lock poisoned").clone()
+    }
+
+    fn set(&self, app: AppInfo) {
+        *self.0.lock().expect("previous-app lock poisoned") = Some(app);
+    }
+}
 
 /// When true, the blur handler will NOT auto-hide the window.
 /// Used by paste_and_keep_window to prevent hide during focus switch.
 pub struct SkipBlurHide(pub AtomicBool);
+
+/// When the blur handler last hid the window. Clicking the tray icon first
+/// takes focus from the window (hiding it) and only then delivers the click, so
+/// a click right after a blur-hide means "hide", not "show again".
+struct LastBlurHide(Mutex<Option<Instant>>);
+
+/// Whether the main window has been shown before. It is created centered;
+/// re-centering it before it was ever mapped uses a size GTK doesn't know yet
+/// and puts it off-center on Linux.
+struct ShownBefore(AtomicBool);
 
 /// Single source of truth for the IPC command surface. Used both to build the
 /// runtime invoke handler and to export the TypeScript bindings (see the
@@ -51,19 +77,32 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // Settings commands
         commands::settings::get_default_settings,
         commands::settings::update_global_shortcut,
+        commands::settings::get_shortcut_binding,
+        commands::settings::configure_system_shortcut,
         commands::settings::set_tray_visible,
         commands::settings::relocalize_menus,
         // System commands
         commands::system::get_app_icon,
         commands::system::get_file_icon,
+        commands::system::get_paster_capabilities,
         commands::system::hide_window,
     ])
 }
 
+/// Read one key from the persisted settings store (`settings.json`, written by
+/// the frontend's store plugin).
+fn read_persisted_setting(app: &tauri::AppHandle, key: &str) -> Option<serde_json::Value> {
+    let path = app.path().app_data_dir().ok()?.join("settings.json");
+    let contents = std::fs::read_to_string(path).ok()?;
+    let json = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+    json.get(key).cloned()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize logging: write to both stderr and a log file
-    // Log file location: ~/Library/Application Support/com.magpie.clipboard/magpie.log
+    // Initialize logging: write to both stderr and a log file named magpie.log
+    // in the per-user data directory (~/Library/Application Support on macOS,
+    // %APPDATA% on Windows, ~/.local/share on Linux) under the app identifier.
     let log_file_path = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("com.magpie.clipboard");
@@ -85,8 +124,11 @@ pub fn run() {
     // Silence tauri's asset-protocol "File does not exist" errors: clipboard
     // history legitimately references files the user may have since deleted, so
     // these are expected and handled in the UI with a fallback, not real errors.
+    // zbus (the Linux D-Bus client) logs every message at info level, and warns
+    // about each short-lived portal request object whose properties it can't
+    // cache.
     let mut builder = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info,magpie=debug,tauri::protocol::asset=off")
+        env_logger::Env::default().default_filter_or("info,magpie=debug,tauri::protocol::asset=off,zbus=error")
     );
 
     if let Ok(file) = file {
@@ -111,8 +153,14 @@ pub fn run() {
 
     builder.init();
 
+    // Desktop portals identify Magpie by this entry. Written first, so the
+    // portal has noticed it by the time Magpie makes its first portal call.
+    #[cfg(target_os = "linux")]
+    platform::ensure_identity_entry();
+
     let specta = specta_builder();
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut app = tauri::Builder::default()
         // --- Plugins ---
         .plugin(tauri_plugin_opener::init())
@@ -132,25 +180,30 @@ pub fn run() {
         )
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init())
         // --- State ---
         .manage(Arc::new(ClipboardMonitorState::default()))
         .manage(commands::system::AppIconCache::default())
-        .manage(PreviousAppBundleId(Mutex::new(None)))
+        .manage(PreviousApp(Mutex::new(None)))
         .manage(SkipBlurHide(AtomicBool::new(false)))
+        .manage(LastBlurHide(Mutex::new(None)))
+        .manage(ShownBefore(AtomicBool::new(false)))
+        .manage(shortcut::ActiveShortcut::new())
         // --- Commands ---
         .invoke_handler(specta.invoke_handler())
         // --- Setup ---
         .setup(|app| {
             let handle = app.handle().clone();
 
-            // Build the platform adapters (clipboard + paste-back) for this OS
-            // and expose them to the monitor and IPC commands via managed state.
-            // This is the single place an OS implementation is selected.
-            let (clipboard_port, paster_port) = platform::build(&handle);
-            app.manage(clipboard_port);
-            app.manage(paster_port);
+            // Build the platform adapters (clipboard, paste-back, icons) for this
+            // OS and expose them to the monitor and IPC commands via managed
+            // state. This is the single place an OS implementation is selected.
+            let platform = platform::build(&handle)?;
+            app.manage(platform.clipboard);
+            app.manage(platform.paster);
+            app.manage(platform.icons);
 
             // Disable App Nap — macOS suspends Accessory apps when the window
             // is hidden, which kills our clipboard monitor timer.
@@ -164,29 +217,16 @@ pub fn run() {
                 .expect("Failed to create system tray");
 
             // Apply persisted tray icon visibility setting
+            if read_persisted_setting(&handle, "show_menu_bar_icon").and_then(|v| v.as_bool()) == Some(false)
+                && let Some(tray) = handle.tray_by_id("main-tray")
             {
-                let app_dir = app.path().app_data_dir().ok();
-                if let Some(dir) = app_dir {
-                    let store_path = dir.join("settings.json");
-                    if store_path.exists() {
-                        if let Ok(contents) = std::fs::read_to_string(&store_path) {
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
-                                if let Some(visible) = json.get("show_menu_bar_icon").and_then(|v| v.as_bool()) {
-                                    if !visible {
-                                        if let Some(tray) = handle.tray_by_id("main-tray") {
-                                            let _ = tray.set_visible(false);
-                                            log::info!("Menu bar icon hidden per saved setting");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                let _ = tray.set_visible(false);
+                log::info!("Tray icon hidden per saved setting");
             }
 
             // Create standard macOS application menu bar
             // Provides ⌘, ⌘Q, ⌘H, ⌘W and standard Edit menu shortcuts
+            #[cfg(target_os = "macos")]
             menu::create_app_menu(&handle)
                 .expect("Failed to create application menu");
 
@@ -241,72 +281,46 @@ pub fn run() {
                     }
                 }
 
-                // Auto-hide on blur (lose focus), unless SkipBlurHide is set
                 let window_clone = window.clone();
-                let handle_for_blur = app.handle().clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
-                        let skip = handle_for_blur.state::<SkipBlurHide>();
+                let handle_for_events = app.handle().clone();
+                window.on_window_event(move |event| match event {
+                    // Auto-hide on blur (lose focus), unless SkipBlurHide is set
+                    tauri::WindowEvent::Focused(false) => {
+                        let skip = handle_for_events.state::<SkipBlurHide>();
                         if skip.0.load(Ordering::Relaxed) {
                             return; // Don't hide during paste-and-keep-window
                         }
+                        #[cfg(target_os = "linux")]
+                        if platform::focus_moved_to_own_popup(&window_clone) {
+                            return;
+                        }
                         if window_clone.is_visible().unwrap_or(false) {
                             let _ = window_clone.hide();
+                            *handle_for_events.state::<LastBlurHide>().0.lock().expect("blur lock poisoned") =
+                                Some(Instant::now());
                         }
                     }
+                    // Alt+F4 and the window manager's close action hide the
+                    // window like Escape does. Closing it would destroy the only
+                    // window of a tray app that has no way to create it again.
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = window_clone.hide();
+                    }
+                    _ => {}
                 });
             }
 
-            // Register global shortcut — read from persisted settings or use default
-            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            // Register the global shortcut — the persisted one, or the default.
+            let saved_shortcut = read_persisted_setting(&handle, "global_shortcut")
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_else(|| platform::DEFAULT_SHORTCUT.to_string());
+            shortcut::register_at_startup(&handle, &saved_shortcut);
 
-            let shortcut_key = {
-                // Try to read from the settings store file
-                let app_dir = app.path().app_data_dir().ok();
-                let mut saved_shortcut: Option<String> = None;
-                if let Some(dir) = app_dir {
-                    let store_path = dir.join("settings.json");
-                    if store_path.exists() {
-                        if let Ok(contents) = std::fs::read_to_string(&store_path) {
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
-                                if let Some(s) = json.get("global_shortcut").and_then(|v| v.as_str()) {
-                                    saved_shortcut = Some(s.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-                saved_shortcut.unwrap_or_else(|| "CmdOrCtrl+Shift+V".to_string())
-            };
-
-            let handle_for_shortcut = app.handle().clone();
-            let register = app.global_shortcut().on_shortcut(
-                shortcut_key.as_str(),
-                move |_app, _shortcut, event| {
-                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        toggle_window(&handle_for_shortcut);
-                    }
-                },
-            );
-
-            // A bad/unregisterable persisted shortcut must NOT prevent launch.
-            // Fall back to the default instead of propagating (which would panic).
-            if let Err(e) = register {
-                log::error!(
-                    "Failed to register saved shortcut '{}': {}; falling back to default",
-                    shortcut_key, e
-                );
-                let handle_fallback = app.handle().clone();
-                let _ = app.global_shortcut().on_shortcut(
-                    "CmdOrCtrl+Shift+V",
-                    move |_app, _shortcut, event| {
-                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                            toggle_window(&handle_fallback);
-                        }
-                    },
-                );
-            } else {
-                log::info!("Global shortcut registered: {}", shortcut_key);
+            // Launched by a desktop shortcut bound to `magpie --toggle` (see
+            // `shortcut`) while no instance was running: show right away.
+            if std::env::args().any(|arg| arg == "--toggle") {
+                show_window(&handle);
             }
 
             // Delay clipboard monitor start to let DB initialize
@@ -338,50 +352,43 @@ pub fn toggle_window(handle: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            // Get previous active app before showing Magpie
-            let info = handle.state::<platform::PasterPort>().frontmost_app();
-            let (bundle_id, name) = (info.bundle_id, info.name);
-
-            // Save the bundle_id for paste-and-keep-window
-            if let Some(ref bid) = bundle_id {
-                let state = handle.state::<PreviousAppBundleId>();
-                *state.0.lock().unwrap() = Some(bid.clone());
-            }
-
-            if let Some(app_name) = name {
-                let _ = window.emit("active-app-changed", app_name);
-            } else {
-                let _ = window.emit("active-app-changed", "Active App");
-            }
-
-            // Show and focus window — do NOT call handle.show() as it
-            // resets activation policy to Regular, causing a Dock icon flash.
-            let _ = window.center();
-            let _ = window.show();
-            let _ = window.set_focus();
+            show_window(handle);
         }
     }
 }
 
-/// Show and focus the main window
+/// Toggle the main window from a tray icon click, which arrives only after the
+/// click already took focus from (and so hid) a visible window.
+pub fn toggle_window_from_tray(handle: &tauri::AppHandle) {
+    let hidden_by_this_click = handle
+        .state::<LastBlurHide>()
+        .0
+        .lock()
+        .expect("blur lock poisoned")
+        .is_some_and(|at| at.elapsed() < Duration::from_millis(300));
+    if !hidden_by_this_click {
+        toggle_window(handle);
+    }
+}
+
+/// Show and focus the main window, remembering which app to paste back into.
 pub fn show_window(handle: &tauri::AppHandle) {
     if let Some(window) = handle.get_webview_window("main") {
-        let info = handle.state::<platform::PasterPort>().frontmost_app();
-        let (bundle_id, name) = (info.bundle_id, info.name);
+        let frontmost = handle.state::<PasterPort>().frontmost_app();
 
-        // Save the bundle_id for paste-and-keep-window
-        if let Some(ref bid) = bundle_id {
-            let state = handle.state::<PreviousAppBundleId>();
-            *state.0.lock().unwrap() = Some(bid.clone());
+        // Remember where to paste back. Magpie itself (e.g. summoned again from
+        // its own tray menu) is never a paste target.
+        if !frontmost.focus.is_magpie() {
+            let name = frontmost.name.clone();
+            handle.state::<PreviousApp>().set(frontmost);
+            let _ = window.emit("active-app-changed", name);
         }
 
-        if let Some(app_name) = name {
-            let _ = window.emit("active-app-changed", app_name);
-        } else {
-            let _ = window.emit("active-app-changed", "Active App");
+        // Show and focus window — do NOT call handle.show() as it
+        // resets activation policy to Regular, causing a Dock icon flash.
+        if handle.state::<ShownBefore>().0.swap(true, Ordering::Relaxed) {
+            let _ = window.center();
         }
-
-        let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
     }

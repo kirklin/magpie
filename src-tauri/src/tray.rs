@@ -7,10 +7,26 @@ use tauri::{
 use crate::i18n::{read_locale, tr, Locale};
 use crate::show_window;
 
+/// The tray icon image. macOS draws a white glyph in the menu bar; the Windows
+/// notification area and Linux panels can be light or dark, where only the
+/// full-colour app icon stays visible.
+#[cfg(target_os = "macos")]
+const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-iconTemplate.png");
+#[cfg(target_os = "windows")]
+const TRAY_ICON: &[u8] = include_bytes!("../icons/32x32.png");
+#[cfg(target_os = "linux")]
+const TRAY_ICON: &[u8] = include_bytes!("../icons/64x64.png");
+
 /// Build the tray context menu in the given locale. Item ids are stable across
 /// locales so the tray's `on_menu_event` handler keeps matching after a rebuild.
-fn build_tray_menu(app: &AppHandle, locale: Locale) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "show", tr(locale, "tray.show"), true, Some("CmdOrCtrl+Shift+V"))?;
+/// `shortcut` is the global shortcut Magpie registered, shown next to
+/// "Show / Hide"; none when the desktop owns it.
+fn build_tray_menu(
+    app: &AppHandle,
+    locale: Locale,
+    shortcut: Option<&str>,
+) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(app, "show", tr(locale, "tray.show"), true, shortcut)?;
     let separator1 = PredefinedMenuItem::separator(app)?;
     let settings = MenuItem::with_id(app, "settings", tr(locale, "menu.settings"), true, Some("CmdOrCtrl+,"))?;
     let about = MenuItem::with_id(app, "about", tr(locale, "menu.about"), true, None::<&str>)?;
@@ -23,49 +39,50 @@ fn build_tray_menu(app: &AppHandle, locale: Locale) -> Result<Menu<tauri::Wry>, 
     )?)
 }
 
-/// Rebuild the tray menu in the currently-persisted locale. Called when the
-/// user changes language so the tray updates without a restart.
-pub fn apply_locale(app: &AppHandle) {
+/// Rebuild the tray menu from the persisted locale and the registered shortcut.
+/// Called when either changes so the tray updates without a restart.
+pub fn rebuild_menu(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("main-tray") {
-        if let Ok(menu) = build_tray_menu(app, read_locale(app)) {
+        let shortcut = app.state::<crate::shortcut::ActiveShortcut>().get();
+        if let Ok(menu) = build_tray_menu(app, read_locale(app), shortcut.as_deref()) {
             let _ = tray.set_menu(Some(menu));
         }
     }
 }
 
+/// Show the main window and switch it to `view`.
+fn show_view(app: &AppHandle, view: &str) {
+    show_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("navigate", view);
+    }
+}
+
 /// Create and configure the system tray
 pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let menu = build_tray_menu(app, read_locale(app))?;
-
-    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-iconTemplate.png"))
-        .unwrap_or_else(|_| app.default_window_icon().cloned().unwrap());
+    let shortcut = app.state::<crate::shortcut::ActiveShortcut>().get();
+    let menu = build_tray_menu(app, read_locale(app), shortcut.as_deref())?;
+    let tray_icon = tauri::image::Image::from_bytes(TRAY_ICON)?;
 
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(tray_icon)
+        .tooltip("Magpie")
         .menu(&menu)
-        // Allow default left/right click to show menu, or use click event to toggle
+        // Windows convention: left click opens the window, right click the
+        // menu. macOS keeps the menu on left click.
+        .show_menu_on_left_click(!cfg!(target_os = "windows"))
         .on_menu_event(move |app, event| {
             log::debug!("Tray menu event: {}", event.id.as_ref());
             match event.id.as_ref() {
-                "show" => {
-                    crate::toggle_window(app);
-                }
-                "settings" => {
-                    show_window(app);
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.emit("navigate", "settings");
-                    }
-                }
-                "about" => {
-                    show_window(app);
-                }
-                "quit" => {
-                    app.exit(0);
-                }
+                "show" => crate::toggle_window(app),
+                "settings" => show_view(app, "settings"),
+                "about" => show_view(app, "about"),
+                "quit" => app.exit(0),
                 _ => {}
             }
         })
         .on_tray_icon_event(|tray, event| {
+            // Not emitted on Linux, where a click always opens the menu.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -73,7 +90,7 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             } = event
             {
                 log::debug!("Tray icon left click");
-                crate::toggle_window(tray.app_handle());
+                crate::toggle_window_from_tray(tray.app_handle());
             }
         })
         .build(app)?;

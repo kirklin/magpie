@@ -5,11 +5,10 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::database::models::{ClipboardEntry, ClipboardQuery};
 use crate::database::pool::get_pool;
-use crate::clipboard::native;
 use crate::clipboard::paste;
 use crate::clipboard::thumbnail;
 use crate::error::AppError;
-use crate::platform::{ClipboardPort, PasterPort, WritePayload};
+use crate::platform::{ClipboardPort, WritePayload};
 
 /// Resolve the image the history list should actually load for `image_path`.
 ///
@@ -198,15 +197,10 @@ pub async fn rename_clipboard_entry(
 #[specta::specta]
 pub async fn paste_image_entry(app_handle: AppHandle, image_path: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
-    let paster = app_handle.state::<PasterPort>().inner().clone();
-
     clipboard.write(&WritePayload::ImageFile(image_path))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // Hide and paste
-    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
-    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-    paster.paste().map_err(AppError::from)
+    paste::paste_into_previous_app(&app_handle).await.map_err(AppError::from)
 }
 
 /// Copy an image entry to the clipboard without pasting
@@ -223,20 +217,12 @@ pub fn copy_image_entry(app_handle: AppHandle, image_path: String) -> Result<(),
 #[specta::specta]
 pub async fn paste_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
-    let paster = app_handle.state::<PasterPort>().inner().clone();
 
-    // 1. Write to clipboard, then stop the monitor re-capturing our own write.
+    // Write to clipboard, then stop the monitor re-capturing our own write.
     clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // 2. Hide the app (returns focus to the previous app)
-    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
-
-    // 3. Wait for the focus switch to complete by reading the active app
-    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-
-    // 4. Synthesize the paste keystroke
-    paster.paste().map_err(AppError::from)
+    paste::paste_into_previous_app(&app_handle).await.map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -252,17 +238,10 @@ pub fn copy_clipboard_entry(app_handle: AppHandle, text: String) -> Result<(), A
 #[specta::specta]
 pub async fn paste_as_plain_text(app_handle: AppHandle, text: String) -> Result<(), AppError> {
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
-    let paster = app_handle.state::<PasterPort>().inner().clone();
-
     clipboard.write(&WritePayload::Text(text))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
-
-    // Wait for frontmost app switch
-    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-
-    paster.paste().map_err(AppError::from)
+    paste::paste_into_previous_app(&app_handle).await.map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -272,15 +251,10 @@ pub async fn paste_file_entry(app_handle: AppHandle, file_paths_json: String) ->
         .map_err(|e| AppError::Other { message: format!("Failed to parse file paths: {}", e) })?;
 
     let clipboard = app_handle.state::<ClipboardPort>().inner().clone();
-    let paster = app_handle.state::<PasterPort>().inner().clone();
-
     clipboard.write(&WritePayload::Files(file_paths))?;
     crate::clipboard::monitor::mark_self_write(&app_handle);
 
-    // Hide the app and paste
-    app_handle.hide().map_err(|e| AppError::Other { message: e.to_string() })?;
-    paste::wait_for_frontmost_app_switch(&paster, paste::MAGPIE_BUNDLE_ID).await;
-    paster.paste().map_err(AppError::from)
+    paste::paste_into_previous_app(&app_handle).await.map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -356,7 +330,8 @@ pub fn append_to_clipboard(app_handle: AppHandle, text: String) -> Result<(), Ap
     Ok(())
 }
 
-/// Save clipboard entry content to a file using a native save dialog
+/// Save clipboard entry content to a file using a native save dialog.
+/// Returns false when the user cancelled.
 #[tauri::command]
 #[specta::specta]
 pub async fn save_entry_as_file(
@@ -364,25 +339,18 @@ pub async fn save_entry_as_file(
     content: String,
     default_name: String,
 ) -> Result<bool, AppError> {
-
-    #[cfg(target_os = "macos")]
-    {
-        match native::run_save_panel(&app_handle, &default_name) {
-            Some(path) => Ok(std::fs::write(&path, &content).is_ok()),
-            None => Ok(false),
+    match crate::dialogs::ask_save_path(&app_handle, &default_name).await? {
+        Some(path) => {
+            std::fs::write(&path, &content)?;
+            Ok(true)
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (&app_handle, &content, &default_name);
-        Err(AppError::Other { message: "Save dialog not supported on this platform".to_string() })
+        None => Ok(false),
     }
 }
 
 /// Paste content to the target app while keeping the Magpie window visible.
 /// Activates the target app (window stays on screen due to always_on_top),
-/// simulates Cmd+V, then re-focuses Magpie.
+/// simulates ⌘/Ctrl+V, then re-focuses Magpie.
 #[tauri::command]
 #[specta::specta]
 pub async fn paste_and_keep_window(app_handle: AppHandle, text: String) -> Result<(), AppError> {
@@ -420,20 +388,19 @@ pub async fn paste_file_and_keep_window(app_handle: AppHandle, file_paths_json: 
 
 /// Shared tail of the paste-and-keep-window commands. The content must already
 /// be on the clipboard. Activates the previously-focused app, waits until it is
-/// actually frontmost (instead of a fixed sleep), synthesizes Cmd+V, then
+/// actually focused (instead of a fixed sleep), synthesizes ⌘/Ctrl+V, then
 /// re-focuses Magpie. The skip-blur flag is always cleared, even on error.
 async fn paste_to_previous_app_keeping_window(app_handle: &AppHandle) -> Result<(), String> {
     use std::sync::atomic::Ordering;
 
-    let paster = app_handle.state::<PasterPort>().inner().clone();
+    let paster = app_handle.state::<crate::platform::PasterPort>().inner().clone();
+    let loc = crate::i18n::read_locale(app_handle);
+    if !paster.capabilities().can_activate_app {
+        return Err(crate::i18n::tr(loc, "err.keep_window_unsupported").to_string());
+    }
 
-    let target_bundle_id = {
-        let prev_state = app_handle.state::<crate::PreviousAppBundleId>();
-        let guard = prev_state.0.lock().map_err(|_| "previous-app lock poisoned".to_string())?;
-        guard.clone()
-    };
-    let Some(target_bundle_id) = target_bundle_id else {
-        return Err("No previous app to paste to".to_string());
+    let Some(target) = app_handle.state::<crate::PreviousApp>().get() else {
+        return Err(crate::i18n::tr(loc, "err.no_previous_app").to_string());
     };
 
     // Keep the window visible while focus moves to the target app.
@@ -441,18 +408,17 @@ async fn paste_to_previous_app_keeping_window(app_handle: &AppHandle) -> Result<
     skip.0.store(true, Ordering::Relaxed);
 
     let result = async {
-        if !paster.activate_app(&target_bundle_id) {
-            return Err(format!("Could not activate target app: {}", target_bundle_id));
+        if !paster.activate(&target) {
+            let name = target.name.as_deref().or(target.app_id.as_deref()).unwrap_or("?");
+            return Err(format!("{}{}", crate::i18n::tr(loc, "err.activate_failed"), name));
         }
-        // Wait until the target app is genuinely frontmost before pasting.
-        paste::wait_until_frontmost(&paster, &target_bundle_id).await;
+        // Wait until the target is genuinely focused before pasting.
+        paste::wait_until_focused(&paster, &target.focus).await;
         paster.paste()?;
 
         // Let the paste land, then re-focus Magpie.
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-        if let Some(window) = app_handle.get_webview_window("main") {
-            let _ = window.set_focus();
-        }
+        paster.refocus_magpie();
         Ok(())
     }
     .await;

@@ -1,8 +1,11 @@
+import type { ShortcutBinding } from "../bindings";
 import type { Locale } from "../i18n";
+import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AccentColorPicker } from "../components/settings/AccentColorPicker";
+import { DesktopShortcutRow } from "../components/settings/DesktopShortcutRow";
 import { SettingGroup } from "../components/settings/SettingGroup";
 import { SettingSelect } from "../components/settings/SettingSelect";
 import { SettingToggle } from "../components/settings/SettingToggle";
@@ -10,6 +13,7 @@ import { ShortcutRecorder } from "../components/settings/ShortcutRecorder";
 import { ThemePicker } from "../components/settings/ThemePicker";
 import { useT } from "../i18n";
 import { parseAppError } from "../lib/error";
+import { IS_MAC } from "../lib/platform";
 import { useClipboardStore } from "../stores/clipboard";
 import { useNavigationStore } from "../stores/navigation";
 import { useSettingsStore } from "../stores/settings";
@@ -25,6 +29,11 @@ export function SettingsView() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [shortcutBinding, setShortcutBinding] = useState<ShortcutBinding | null>(null);
+
+  useEffect(() => {
+    invoke<ShortcutBinding>("get_shortcut_binding").then(setShortcutBinding).catch(console.error);
+  }, []);
 
   useEffect(() => {
     loadSettings();
@@ -136,7 +145,7 @@ export function SettingsView() {
             <SettingToggle
               checked={settings.show_menu_bar_icon}
               description={t("settings.autostart_desc")}
-              label={t("settings.menubar_icon")}
+              label={t(IS_MAC ? "settings.menubar_icon" : "settings.tray_icon")}
               onChange={val => updateSetting("show_menu_bar_icon", val)}
             />
             <SettingSelect
@@ -171,12 +180,16 @@ export function SettingsView() {
           </SettingGroup>
 
           <SettingGroup title={t("settings.section.shortcut")}>
-            <ShortcutRecorder
-              label={t("settings.shortcut_toggle")}
-              description={t("settings.shortcut_toggle_desc")}
-              value={settings.global_shortcut}
-              onChange={handleShortcutChange}
-            />
+            {shortcutBinding && shortcutBinding.kind !== "native"
+              ? <DesktopShortcutRow label={t("settings.shortcut_toggle")} binding={shortcutBinding} />
+              : (
+                  <ShortcutRecorder
+                    label={t("settings.shortcut_toggle")}
+                    description={t("settings.shortcut_toggle_desc")}
+                    value={settings.global_shortcut}
+                    onChange={handleShortcutChange}
+                  />
+                )}
           </SettingGroup>
 
           <SettingGroup title={t("settings.section.data")}>
