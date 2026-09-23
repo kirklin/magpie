@@ -11,10 +11,20 @@ jobs:
         include:
           - platform: macos-latest
             args: ""
+          - platform: windows-latest
+            args: ""
+          - platform: ubuntu-22.04
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -44,11 +54,14 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Check generated bindings are up to date
+        shell: bash
         run: |
-          # The Rust test run regenerates src/bindings.ts (export_typescript_bindings).
-          # A diff here means a Rust IPC type changed without regenerating the bindings.
+          # The Rust test run regenerates src/bindings.ts (export_typescript_bindings)
+          # indented with tabs; eslint gives it the committed formatting. A diff
+          # after that means a Rust IPC type changed without regenerating the bindings.
+          pnpm exec eslint --fix src/bindings.ts
           git diff --exit-code src/bindings.ts \
-            || (echo "::error::src/bindings.ts is stale — run 'cargo test export_typescript_bindings' and commit the result" && exit 1)
+            || (echo "::error::src/bindings.ts is stale — run 'cargo test export_typescript_bindings', then 'pnpm exec eslint --fix src/bindings.ts', and commit the result" && exit 1)
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

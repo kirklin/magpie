@@ -33,12 +33,34 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
           - platform: macos-latest
             args: --target x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+          - platform: windows-latest
+            args: --target aarch64-pc-windows-msvc
+            rust-targets: aarch64-pc-windows-msvc
+          # The oldest supported Ubuntu, so the AppImage and packages run on
+          # distributions with an older glibc too.
+          - platform: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          - platform: ubuntu-22.04-arm
+            args: ""
+            rust-targets: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -51,7 +73,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust-targets }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -62,6 +84,7 @@ jobs:
         run: pnpm install
 
       - name: Import Code Signing Certificate
+        if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
